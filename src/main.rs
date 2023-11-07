@@ -52,7 +52,6 @@ impl Application for GstreamserIced {
     fn new(flags: Self::Flags) -> (Self, Command<Self::Message>) {
         gst::init().unwrap();
 
-        let element = gst::Pipeline::new();
         let videoconvert = gst::ElementFactory::make("videoconvert").build().unwrap();
         let videoscale = gst::ElementFactory::make("videoscale").build().unwrap();
         let cap = gst::Caps::builder("video/x-raw")
@@ -71,13 +70,11 @@ impl Application for GstreamserIced {
             .add_many(&[&videoconvert, &videoscale, &appsink])
             .unwrap();
 
-        let play_bin = gst::ElementFactory::make("playbin")
-            .property("uri", flags.url.to_string())
+        let source = gst::ElementFactory::make("playbin")
+            .property("uri", flags.url.as_str())
             .property("video-sink", video_sink_pipeline.to_value())
             .build()
             .unwrap();
-
-        element.add_many(&[&play_bin]).unwrap();
 
         let app_sink = appsink.downcast::<gst_app::AppSink>().unwrap();
         app_sink.set_callbacks(
@@ -88,15 +85,19 @@ impl Application for GstreamserIced {
                 })
                 .build(),
         );
-        element.set_state(gst::State::Playing).unwrap();
-        element.state(gst::ClockTime::from_seconds(5)).0.unwrap();
 
-        (
-            Self {
-                url: flags.url,
-                //pipeline: element,
-            },
-            Command::none(),
-        )
+        source.set_state(gst::State::Playing).unwrap();
+        source.state(gst::ClockTime::from_seconds(5)).0.unwrap();
+
+        let bus = source.bus().unwrap();
+        'out: loop {
+            for msg in bus.iter() {
+                if let gst::MessageView::Eos(eos) = msg.view() {
+                    break 'out;
+                }
+            }
+        }
+
+        (Self { url: flags.url }, Command::none())
     }
 }
