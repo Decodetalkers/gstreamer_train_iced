@@ -1,0 +1,20 @@
+[package]
+name = "gstreamer_iced"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0.75"
+iced = { version = "0.10", features = [
+	"tokio",
+	"debug",
+	"image",
+	"advanced",
+	"svg",
+] }
+gstreamer = "0.21.1"
+gstreamer-app = "0.21.1"
+tokio = { version = "1.28", features = ["full"] }
+url = "2.4.1"
