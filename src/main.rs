@@ -31,11 +31,15 @@ fn main() -> iced::Result {
 struct GstreamserIced {
     rv: Arc<TokioMutex<Receiver<GstreamerMessage>>>,
     frame: Arc<Mutex<Option<image::Handle>>>, //pipeline: gst::Pipeline,
+    bus: gst::Bus,
+    source: gst::Bin,
 }
 
+#[allow(unused)]
 #[derive(Debug, Clone, Copy)]
 enum GstreamerMessage {
     Update,
+    Todo,
 }
 
 impl Application for GstreamserIced {
@@ -64,7 +68,19 @@ impl Application for GstreamserIced {
             .into()
     }
 
-    fn update(&mut self, _message: Self::Message) -> iced::Command<Self::Message> {
+    fn update(&mut self, message: Self::Message) -> iced::Command<Self::Message> {
+        if let GstreamerMessage::Update = message {
+            for msg in self.bus.iter() {
+                match msg.view() {
+                    gst::MessageView::Error(err) => panic!("{:#?}", err),
+                    gst::MessageView::Eos(_eos) => {
+                        self.source.set_state(gst::State::Null).unwrap();
+                        break;
+                    }
+                    _ => {}
+                }
+            }
+        }
         Command::none()
     }
 
@@ -137,6 +153,8 @@ impl Application for GstreamserIced {
             Self {
                 frame,
                 rv: Arc::new(TokioMutex::new(rv)),
+                bus: source.bus().unwrap(),
+                source,
             },
             Command::none(),
         )
