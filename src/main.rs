@@ -2,9 +2,9 @@ use gst::prelude::*;
 use gstreamer as gst;
 use gstreamer_app as gst_app;
 use iced::futures::SinkExt;
-use iced::widget::{image, Image};
+use iced::widget::{button, column, image, text, Image};
 use iced::{executor, subscription, widget::container, Application, Theme};
-use iced::{Command, Length, Settings};
+use iced::{Command, Element, Length, Settings};
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::Mutex as TokioMutex;
@@ -14,6 +14,11 @@ static MEDIA_PLAYER: &[u8] = include_bytes!("../resource/media-playback-start.sv
 #[derive(Debug, Default)]
 struct InitFlage {
     url: String,
+}
+#[derive(Debug, Clone, Copy)]
+enum PlayStatus {
+    Stop,
+    Start,
 }
 
 fn main() -> iced::Result {
@@ -29,24 +34,27 @@ fn main() -> iced::Result {
 
 #[derive(Debug)]
 struct GstreamserIced {
-    rv: Arc<TokioMutex<Receiver<GstreamerMessage>>>,
+    rv: Arc<TokioMutex<Receiver<GstreamerUpdate>>>,
     frame: Arc<Mutex<Option<image::Handle>>>, //pipeline: gst::Pipeline,
     bus: gst::Bus,
     source: gst::Bin,
+    play_status: PlayStatus,
 }
 
-#[allow(unused)]
 #[derive(Debug, Clone, Copy)]
-enum GstreamerMessage {
+struct GstreamerUpdate;
+
+#[derive(Debug, Clone, Copy)]
+enum GStreamerMessage {
     Update,
-    Todo,
+    PlayStatusChanged(PlayStatus),
 }
 
 impl Application for GstreamserIced {
     type Theme = Theme;
     type Flags = InitFlage;
     type Executor = executor::Default;
-    type Message = GstreamerMessage;
+    type Message = GStreamerMessage;
 
     fn view(&self) -> iced::Element<Self::Message> {
         let frame = self
@@ -59,26 +67,52 @@ impl Application for GstreamserIced {
             })
             .unwrap_or(image::Handle::from_memory(MEDIA_PLAYER));
 
+        let btn: Element<Self::Message> =
+            match self.play_status {
+                PlayStatus::Stop => button(text("|>"))
+                    .on_press(GStreamerMessage::PlayStatusChanged(PlayStatus::Start)),
+                PlayStatus::Start => button(text("[]"))
+                    .on_press(GStreamerMessage::PlayStatusChanged(PlayStatus::Stop)),
+            }
+            .into();
         let video = Image::new(frame).width(Length::Fill);
-        container(video)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .center_x()
-            .center_y()
-            .into()
+
+        container(column![
+            video,
+            container(btn).width(Length::Fill).center_x()
+        ])
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .center_x()
+        .center_y()
+        .into()
     }
 
     fn update(&mut self, message: Self::Message) -> iced::Command<Self::Message> {
-        if let GstreamerMessage::Update = message {
-            for msg in self.bus.iter() {
-                match msg.view() {
-                    gst::MessageView::Error(err) => panic!("{:#?}", err),
-                    gst::MessageView::Eos(_eos) => {
-                        self.source.set_state(gst::State::Null).unwrap();
-                        break;
+        match message {
+            GStreamerMessage::Update => {
+                for msg in self.bus.iter() {
+                    match msg.view() {
+                        gst::MessageView::Error(err) => panic!("{:#?}", err),
+                        gst::MessageView::Eos(_eos) => {
+                            self.play_status = PlayStatus::Stop;
+                            self.source.set_state(gst::State::Null).unwrap();
+                            break;
+                        }
+                        _ => {}
                     }
-                    _ => {}
                 }
+            }
+            GStreamerMessage::PlayStatusChanged(status) => {
+                match status {
+                    PlayStatus::Start => {
+                        self.source.set_state(gst::State::Playing).unwrap();
+                    }
+                    PlayStatus::Stop => {
+                        self.source.set_state(gst::State::Paused).unwrap();
+                    }
+                }
+                self.play_status = status;
             }
         }
         Command::none()
@@ -99,6 +133,7 @@ impl Application for GstreamserIced {
                 let _ = output.send(message).await;
             }
         })
+        .map(|_| GStreamerMessage::Update)
     }
 
     fn new(flags: Self::Flags) -> (Self, Command<Self::Message>) {
@@ -119,7 +154,7 @@ impl Application for GstreamserIced {
         let app_sink = app_sink.downcast::<gst_app::AppSink>().unwrap();
         let frame: Arc<Mutex<Option<image::Handle>>> = Arc::new(Mutex::new(None));
         let frame_ref = Arc::clone(&frame);
-        let (sd, rv) = tokio::sync::mpsc::channel::<GstreamerMessage>(100);
+        let (sd, rv) = tokio::sync::mpsc::channel::<GstreamerUpdate>(100);
 
         app_sink.set_callbacks(
             gst_app::AppSinkCallbacks::builder()
@@ -141,13 +176,11 @@ impl Application for GstreamserIced {
                             height as _,
                             map.as_slice().to_owned(),
                         ));
-                    sd.try_send(GstreamerMessage::Update).ok();
+                    sd.try_send(GstreamerUpdate).ok();
                     Ok(gst::FlowSuccess::Ok)
                 })
                 .build(),
         );
-
-        source.set_state(gst::State::Playing).unwrap();
 
         (
             Self {
@@ -155,6 +188,7 @@ impl Application for GstreamserIced {
                 rv: Arc::new(TokioMutex::new(rv)),
                 bus: source.bus().unwrap(),
                 source,
+                play_status: PlayStatus::Stop,
             },
             Command::none(),
         )
