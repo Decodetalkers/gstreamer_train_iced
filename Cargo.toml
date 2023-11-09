@@ -18,3 +18,5 @@ gstreamer = "0.21.1"
 gstreamer-app = "0.21.1"
 tokio = { version = "1.28", features = ["full"] }
 url = "2.4.1"
+num-rational = "0.4.1"
+num-traits = "0.2.17"

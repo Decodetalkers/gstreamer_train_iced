@@ -1,13 +1,11 @@
 use gst::prelude::*;
 use gstreamer as gst;
 use gstreamer_app as gst_app;
-use iced::futures::SinkExt;
 use iced::widget::{button, column, image, text, Image};
-use iced::{executor, subscription, widget::container, Application, Theme};
+use iced::{executor, widget::container, Application, Theme};
 use iced::{Command, Element, Length, Settings};
+use num_traits::ToPrimitive;
 use std::sync::{Arc, Mutex};
-use tokio::sync::mpsc::Receiver;
-use tokio::sync::Mutex as TokioMutex;
 
 static MEDIA_PLAYER: &[u8] = include_bytes!("../resource/media-playback-start.svg");
 
@@ -15,6 +13,7 @@ static MEDIA_PLAYER: &[u8] = include_bytes!("../resource/media-playback-start.sv
 struct InitFlage {
     url: String,
 }
+
 #[derive(Debug, Clone, Copy)]
 enum PlayStatus {
     Stop,
@@ -34,11 +33,11 @@ fn main() -> iced::Result {
 
 #[derive(Debug)]
 struct GstreamserIced {
-    rv: Arc<TokioMutex<Receiver<GstreamerUpdate>>>,
     frame: Arc<Mutex<Option<image::Handle>>>, //pipeline: gst::Pipeline,
     bus: gst::Bus,
     source: gst::Bin,
     play_status: PlayStatus,
+    framerate: f64,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -123,17 +122,8 @@ impl Application for GstreamserIced {
     }
 
     fn subscription(&self) -> iced::Subscription<Self::Message> {
-        let rv = self.rv.clone();
-        subscription::channel(std::any::TypeId::of::<()>(), 100, |mut output| async move {
-            let mut rv = rv.lock().await;
-            loop {
-                let Some(message) = rv.recv().await else {
-                    continue;
-                };
-                let _ = output.send(message).await;
-            }
-        })
-        .map(|_| GStreamerMessage::Update)
+        iced::time::every(std::time::Duration::from_secs_f64(0.5 / self.framerate))
+            .map(|_| GStreamerMessage::Update)
     }
 
     fn new(flags: Self::Flags) -> (Self, Command<Self::Message>) {
@@ -154,7 +144,6 @@ impl Application for GstreamserIced {
         let app_sink = app_sink.downcast::<gst_app::AppSink>().unwrap();
         let frame: Arc<Mutex<Option<image::Handle>>> = Arc::new(Mutex::new(None));
         let frame_ref = Arc::clone(&frame);
-        let (sd, rv) = tokio::sync::mpsc::channel::<GstreamerUpdate>(100);
 
         app_sink.set_callbacks(
             gst_app::AppSinkCallbacks::builder()
@@ -176,19 +165,33 @@ impl Application for GstreamserIced {
                             height as _,
                             map.as_slice().to_owned(),
                         ));
-                    sd.try_send(GstreamerUpdate).ok();
                     Ok(gst::FlowSuccess::Ok)
                 })
                 .build(),
         );
 
+        source.set_state(gst::State::Playing).unwrap();
+
+        // wait for up to 5 seconds until the decoder gets the source capabilities
+        source.state(gst::ClockTime::from_seconds(5)).0.unwrap();
+        let caps = pad.current_caps().unwrap();
+        let s = caps.structure(0).unwrap();
+        let framerate = s.get::<gst::Fraction>("framerate").unwrap();
+
+        // after get the information, paused it
+        source.set_state(gst::State::Paused).unwrap();
         (
             Self {
                 frame,
-                rv: Arc::new(TokioMutex::new(rv)),
                 bus: source.bus().unwrap(),
                 source,
                 play_status: PlayStatus::Stop,
+                framerate: num_rational::Rational32::new(
+                    framerate.numer() as _,
+                    framerate.denom() as _,
+                )
+                .to_f64()
+                .unwrap(),
             },
             Command::none(),
         )
