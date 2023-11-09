@@ -12,7 +12,7 @@ struct InitFlage {
 fn main() -> iced::Result {
     GstreamserIcedProgram::run(Settings {
         flags: InitFlage {
-            url: "https://gstreamer.freedesktop.org/data/media/sintel_trailer-480p.webm"
+            url: "http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4"
                 .to_string(),
         },
         ..Settings::default()

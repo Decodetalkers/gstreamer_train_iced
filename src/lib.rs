@@ -1,10 +1,13 @@
 use gst::prelude::*;
 use gstreamer as gst;
 use gstreamer_app as gst_app;
+use iced::futures::SinkExt;
 use iced::widget::image;
 use iced::Command;
-use num_traits::ToPrimitive;
+use smol::lock::Mutex as AsyncMutex;
 use std::sync::{Arc, Mutex};
+
+use std::sync::mpsc;
 
 static MEDIA_PLAYER: &[u8] = include_bytes!("../resource/media-playback-start.svg");
 
@@ -20,12 +23,13 @@ pub struct GstreamserIced {
     bus: gst::Bus,
     source: gst::Bin,
     play_status: PlayStatus,
-    framerate: f64,
+    rv: Arc<AsyncMutex<mpsc::Receiver<GStreamerMessage>>>,
 }
 
 #[derive(Debug, Clone, Copy)]
 pub enum GStreamerMessage {
     Update,
+    FrameUpdate,
     PlayStatusChanged(PlayStatus),
 }
 
@@ -68,6 +72,7 @@ impl GstreamserIced {
         let frame: Arc<Mutex<Option<image::Handle>>> = Arc::new(Mutex::new(None));
         let frame_ref = Arc::clone(&frame);
 
+        let (sd, rv) = mpsc::channel::<GStreamerMessage>();
         app_sink.set_callbacks(
             gst_app::AppSinkCallbacks::builder()
                 .new_sample(move |sink| {
@@ -88,42 +93,41 @@ impl GstreamserIced {
                             height as _,
                             map.as_slice().to_owned(),
                         ));
+                    sd.send(GStreamerMessage::FrameUpdate).ok();
                     Ok(gst::FlowSuccess::Ok)
                 })
                 .build(),
         );
-
-        source.set_state(gst::State::Playing).unwrap();
-
-        // wait for up to 5 seconds until the decoder gets the source capabilities
-        source.state(gst::ClockTime::from_seconds(5)).0.unwrap();
-        let caps = pad.current_caps().unwrap();
-        let s = caps.structure(0).unwrap();
-        let framerate = s.get::<gst::Fraction>("framerate").unwrap();
-        // after get the information, paused it
-        source.set_state(gst::State::Paused).unwrap();
-
-        let framerate = if framerate.numer() == 0 {
-            10_f64
-        } else {
-            num_rational::Rational32::new(framerate.numer() as _, framerate.denom() as _)
-                .to_f64()
-                .unwrap()
-        };
 
         Self {
             frame,
             bus: source.bus().unwrap(),
             source,
             play_status: PlayStatus::Stop,
-            framerate,
+            rv: Arc::new(AsyncMutex::new(rv)),
         }
     }
 
     pub fn subscription(&self) -> iced::Subscription<GStreamerMessage> {
+        let rv = self.rv.clone();
         if self.is_playing() {
-            iced::time::every(std::time::Duration::from_secs_f64(0.5 / self.framerate))
-                .map(|_| GStreamerMessage::Update)
+            iced::Subscription::batch([
+                iced::time::every(std::time::Duration::from_secs(1))
+                    .map(|_| GStreamerMessage::Update),
+                iced::subscription::channel(
+                    std::any::TypeId::of::<()>(),
+                    100,
+                    |mut output| async move {
+                        let rv = rv.lock().await;
+                        loop {
+                            let Ok(message) = rv.recv() else {
+                                continue;
+                            };
+                            let _ = output.send(message).await;
+                        }
+                    },
+                ),
+            ])
         } else {
             iced::Subscription::none()
         }
@@ -155,6 +159,7 @@ impl GstreamserIced {
                 }
                 self.play_status = status;
             }
+            _ => {}
         }
         Command::none()
     }
