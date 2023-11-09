@@ -6,14 +6,18 @@ use gstreamer_iced::*;
 
 #[derive(Debug, Default)]
 struct InitFlage {
-    url: String,
+    url: Option<url::Url>,
 }
 
 fn main() -> iced::Result {
     GstreamserIcedProgram::run(Settings {
         flags: InitFlage {
-            url: "https://gstreamer.freedesktop.org/data/media/sintel_trailer-480p.webm"
-                .to_string(),
+            url: Some(
+                url::Url::parse(
+                    "https://gstreamer.freedesktop.org/data/media/sintel_trailer-480p.webm",
+                )
+                .unwrap(),
+            ),
         },
         ..Settings::default()
     })
@@ -70,7 +74,7 @@ impl Application for GstreamserIcedProgram {
     }
 
     fn new(flags: Self::Flags) -> (Self, Command<Self::Message>) {
-        let frame = GstreamserIced::new_url(flags.url.as_str(), true);
+        let frame = GstreamserIced::new_url(flags.url.as_ref().unwrap(), true);
 
         (Self { frame }, Command::none())
     }

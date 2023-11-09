@@ -61,9 +61,9 @@ impl GstreamserIced {
         matches!(self.play_status, PlayStatus::Start)
     }
 
-    pub fn new_url(url: &str, _islive: bool) -> Self {
+    pub fn new_url(url: &url::Url, _islive: bool) -> Self {
         gst::init().unwrap();
-        let source = gst::parse_launch(&format!("playbin uri=\"{}\" video-sink=\"videoconvert ! videoscale ! appsink name=app_sink caps=video/x-raw,format=BGRA,pixel-aspect-ratio=1/1\"", url)).unwrap();
+        let source = gst::parse_launch(&format!("playbin uri=\"{}\" video-sink=\"videoconvert ! videoscale ! appsink name=app_sink caps=video/x-raw,format=RGBA,pixel-aspect-ratio=1/1\"", url.as_str())).unwrap();
         let source = source.downcast::<gst::Bin>().unwrap();
 
         let video_sink: gst::Element = source.property("video-sink");
