@@ -24,6 +24,8 @@ pub struct GstreamserIced {
     source: gst::Bin,
     play_status: PlayStatus,
     rv: Arc<AsyncMutex<mpsc::Receiver<GStreamerMessage>>>,
+    duration: u64,
+    position: u64,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -61,7 +63,7 @@ impl GstreamserIced {
         matches!(self.play_status, PlayStatus::Start)
     }
 
-    pub fn new_url(url: &url::Url, _islive: bool) -> Self {
+    pub fn new_url(url: &url::Url, islive: bool) -> Self {
         gst::init().unwrap();
         let source = gst::parse_launch(&format!("playbin uri=\"{}\" video-sink=\"videoconvert ! videoscale ! appsink name=app_sink caps=video/x-raw,format=RGBA,pixel-aspect-ratio=1/1\"", url.as_str())).unwrap();
         let source = source.downcast::<gst::Bin>().unwrap();
@@ -79,6 +81,21 @@ impl GstreamserIced {
         let app_sink = app_sink.downcast::<gst_app::AppSink>().unwrap();
         let frame: Arc<Mutex<Option<image::Handle>>> = Arc::new(Mutex::new(None));
         let frame_ref = Arc::clone(&frame);
+
+        source.set_state(gst::State::Playing).unwrap();
+        // wait for up to 5 seconds until the decoder gets the source capabilities
+        source.state(gst::ClockTime::from_seconds(5)).0.unwrap();
+
+        let duration = if islive {
+            0
+        } else {
+            source
+                .query_duration::<gst::ClockTime>()
+                .unwrap()
+                .nseconds()
+        };
+
+        source.set_state(gst::State::Paused).unwrap();
 
         let (sd, rv) = mpsc::channel::<GStreamerMessage>();
         app_sink.set_callbacks(
@@ -113,6 +130,8 @@ impl GstreamserIced {
             source,
             play_status: PlayStatus::Stop,
             rv: Arc::new(AsyncMutex::new(rv)),
+            duration,
+            position: 0,
         }
     }
 
@@ -144,6 +163,13 @@ impl GstreamserIced {
     pub fn update(&mut self, message: GStreamerMessage) -> iced::Command<GStreamerMessage> {
         match message {
             GStreamerMessage::Update => {
+                if self.duration != 0 {
+                    self.position = self
+                        .source
+                        .query_position::<gst::ClockTime>()
+                        .unwrap()
+                        .nseconds();
+                }
                 for msg in self.bus.iter() {
                     match msg.view() {
                         gst::MessageView::Error(err) => panic!("{:#?}", err),
