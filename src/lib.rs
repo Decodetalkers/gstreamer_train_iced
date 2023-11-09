@@ -137,7 +137,7 @@ impl GstreamserIced {
 
     pub fn new_url(url: &url::Url, islive: bool) -> Result<Self, Error> {
         gst::init()?;
-        let source = gst::parse_launch(&format!("playbin uri=\"{}\" video-sink=\"videoconvert ! videoscale ! appsink name=app_sink caps=video/x-raw,format=RGBA,pixel-aspect-ratio=1/1\"", url.as_str())).unwrap();
+        let source = gst::parse_launch(&format!("playbin uri=\"{}\" video-sink=\"videoconvert ! videoscale ! appsink name=app_sink caps=video/x-raw,format=RGBA,pixel-aspect-ratio=1/1\"", url.as_str()))?;
         let source = source.downcast::<gst::Bin>().unwrap();
 
         let video_sink: gst::Element = source.property("video-sink");
