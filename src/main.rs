@@ -74,7 +74,7 @@ impl Application for GstreamserIcedProgram {
     }
 
     fn new(flags: Self::Flags) -> (Self, Command<Self::Message>) {
-        let frame = GstreamserIced::new_url(flags.url.as_ref().unwrap(), false);
+        let frame = GstreamserIced::new_url(flags.url.as_ref().unwrap(), false).unwrap();
 
         (Self { frame }, Command::none())
     }

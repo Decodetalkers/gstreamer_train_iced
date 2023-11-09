@@ -1,4 +1,6 @@
+use gst::glib;
 use gst::prelude::*;
+use gst::GenericFormattedValue;
 use gstreamer as gst;
 use gstreamer_app as gst_app;
 use iced::futures::SinkExt;
@@ -6,10 +8,11 @@ use iced::widget::image;
 use iced::Command;
 use smol::lock::Mutex as AsyncMutex;
 use std::sync::{Arc, Mutex};
+use thiserror::Error;
 
 use std::sync::mpsc;
 
-static MEDIA_PLAYER: &[u8] = include_bytes!("../resource/media-playback-start.svg");
+static MEDIA_PLAYER: &[u8] = include_bytes!("../resource/popandpipi.jpg");
 
 #[derive(Debug, Clone, Copy)]
 pub enum PlayStatus {
@@ -26,6 +29,62 @@ pub struct GstreamserIced {
     rv: Arc<AsyncMutex<mpsc::Receiver<GStreamerMessage>>>,
     duration: u64,
     position: u64,
+    info_get: bool,
+}
+
+#[derive(Debug, Error)]
+pub enum Error {
+    #[error("{0}")]
+    Glib(#[from] glib::Error),
+    #[error("{0}")]
+    Bool(#[from] glib::BoolError),
+    #[error("failed to get the gstreamer bus")]
+    Bus,
+    #[error("{0}")]
+    StateChange(#[from] gst::StateChangeError),
+    #[error("failed to cast gstreamer element")]
+    Cast,
+    #[error("{0}")]
+    Io(#[from] std::io::Error),
+    #[error("invalid URI")]
+    Uri,
+    #[error("failed to get media capabilities")]
+    Caps,
+    #[error("failed to query media duration or position")]
+    Duration,
+    #[error("failed to sync with playback")]
+    Sync,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Position {
+    /// Position based on time.
+    ///
+    /// Not the most accurate format for videos.
+    Time(std::time::Duration),
+    /// Position based on nth frame.
+    Frame(u64),
+}
+
+impl From<Position> for GenericFormattedValue {
+    fn from(pos: Position) -> Self {
+        match pos {
+            Position::Time(t) => gst::ClockTime::from_nseconds(t.as_nanos() as _).into(),
+            Position::Frame(f) => gst::format::Default::from_u64(f).into(),
+        }
+    }
+}
+
+impl From<std::time::Duration> for Position {
+    fn from(t: std::time::Duration) -> Self {
+        Position::Time(t)
+    }
+}
+
+impl From<u64> for Position {
+    fn from(f: u64) -> Self {
+        Position::Frame(f)
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -44,6 +103,19 @@ impl Drop for GstreamserIced {
 }
 
 impl GstreamserIced {
+    pub fn duration(&self) -> u64 {
+        self.duration
+    }
+
+    pub fn seek<T>(&mut self, position: T) -> Result<(), Error>
+    where
+        T: Into<GenericFormattedValue>,
+    {
+        self.source
+            .seek_simple(gst::SeekFlags::FLUSH, position.into())?;
+        Ok(())
+    }
+
     pub fn frame_handle(&self) -> image::Handle {
         self.frame
             .lock()
@@ -63,8 +135,8 @@ impl GstreamserIced {
         matches!(self.play_status, PlayStatus::Start)
     }
 
-    pub fn new_url(url: &url::Url, islive: bool) -> Self {
-        gst::init().unwrap();
+    pub fn new_url(url: &url::Url, islive: bool) -> Result<Self, Error> {
+        gst::init()?;
         let source = gst::parse_launch(&format!("playbin uri=\"{}\" video-sink=\"videoconvert ! videoscale ! appsink name=app_sink caps=video/x-raw,format=RGBA,pixel-aspect-ratio=1/1\"", url.as_str())).unwrap();
         let source = source.downcast::<gst::Bin>().unwrap();
 
@@ -81,21 +153,6 @@ impl GstreamserIced {
         let app_sink = app_sink.downcast::<gst_app::AppSink>().unwrap();
         let frame: Arc<Mutex<Option<image::Handle>>> = Arc::new(Mutex::new(None));
         let frame_ref = Arc::clone(&frame);
-
-        source.set_state(gst::State::Playing).unwrap();
-        // wait for up to 5 seconds until the decoder gets the source capabilities
-        source.state(gst::ClockTime::from_seconds(5)).0.unwrap();
-
-        let duration = if islive {
-            0
-        } else {
-            source
-                .query_duration::<gst::ClockTime>()
-                .unwrap()
-                .nseconds()
-        };
-
-        source.set_state(gst::State::Paused).unwrap();
 
         let (sd, rv) = mpsc::channel::<GStreamerMessage>();
         app_sink.set_callbacks(
@@ -124,15 +181,16 @@ impl GstreamserIced {
                 .build(),
         );
 
-        Self {
+        Ok(Self {
             frame,
             bus: source.bus().unwrap(),
             source,
             play_status: PlayStatus::Stop,
             rv: Arc::new(AsyncMutex::new(rv)),
-            duration,
+            duration: 0,
             position: 0,
-        }
+            info_get: islive,
+        })
     }
 
     pub fn subscription(&self) -> iced::Subscription<GStreamerMessage> {
@@ -163,6 +221,15 @@ impl GstreamserIced {
     pub fn update(&mut self, message: GStreamerMessage) -> iced::Command<GStreamerMessage> {
         match message {
             GStreamerMessage::Update => {
+                // get the info in the first time of dispatch
+                if self.info_get {
+                    self.duration = self
+                        .source
+                        .query_duration::<gst::ClockTime>()
+                        .unwrap()
+                        .nseconds();
+                    self.info_get = false;
+                }
                 if self.duration != 0 {
                     self.position = self
                         .source
