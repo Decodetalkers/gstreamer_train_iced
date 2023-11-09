@@ -19,8 +19,9 @@ struct InitFlage {
 fn main() -> iced::Result {
     GstreamserIced::run(Settings {
         flags: InitFlage {
-            url: "http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4"
-                .to_string(),
+            url:
+                "http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4"
+                    .to_string(),
         },
         ..Settings::default()
     })
@@ -28,7 +29,6 @@ fn main() -> iced::Result {
 
 #[derive(Debug)]
 struct GstreamserIced {
-    url: String,
     rv: Arc<TokioMutex<Receiver<GstreamerMessage>>>,
     frame: Arc<Mutex<Option<image::Handle>>>, //pipeline: gst::Pipeline,
 }
@@ -54,6 +54,7 @@ impl Application for GstreamserIced {
                     .unwrap_or(image::Handle::from_memory(MEDIA_PLAYER))
             })
             .unwrap_or(image::Handle::from_memory(MEDIA_PLAYER));
+
         let video = Image::new(frame).width(Length::Fill);
         container(video)
             .width(Length::Fill)
@@ -135,7 +136,6 @@ impl Application for GstreamserIced {
         (
             Self {
                 frame,
-                url: flags.url,
                 rv: Arc::new(TokioMutex::new(rv)),
             },
             Command::none(),
