@@ -34,7 +34,7 @@ pub enum GStreamerMessage {
 }
 
 impl GstreamserIced {
-    pub fn frame(&self) -> image::Handle {
+    pub fn frame_handle(&self) -> image::Handle {
         self.frame
             .lock()
             .map(|frame| {
@@ -109,8 +109,8 @@ impl GstreamserIced {
     }
 
     pub fn subscription(&self) -> iced::Subscription<GStreamerMessage> {
-        let rv = self.rv.clone();
         if self.is_playing() {
+            let rv = self.rv.clone();
             iced::Subscription::batch([
                 iced::time::every(std::time::Duration::from_secs(1))
                     .map(|_| GStreamerMessage::Update),

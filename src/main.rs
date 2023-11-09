@@ -35,7 +35,7 @@ impl Application for GstreamserIcedProgram {
     type Message = GStreamerMessage;
 
     fn view(&self) -> iced::Element<Self::Message> {
-        let frame = self.frame.frame();
+        let frame = self.frame.frame_handle();
 
         let btn: Element<Self::Message> =
             match self.frame.play_status() {
