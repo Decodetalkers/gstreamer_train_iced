@@ -33,6 +33,14 @@ pub enum GStreamerMessage {
     PlayStatusChanged(PlayStatus),
 }
 
+impl Drop for GstreamserIced {
+    fn drop(&mut self) {
+        self.source
+            .set_state(gst::State::Null)
+            .expect("failed to set state");
+    }
+}
+
 impl GstreamserIced {
     pub fn frame_handle(&self) -> image::Handle {
         self.frame
@@ -112,7 +120,7 @@ impl GstreamserIced {
         if self.is_playing() {
             let rv = self.rv.clone();
             iced::Subscription::batch([
-                iced::time::every(std::time::Duration::from_secs(1))
+                iced::time::every(std::time::Duration::from_secs_f64(0.05))
                     .map(|_| GStreamerMessage::Update),
                 iced::subscription::channel(
                     std::any::TypeId::of::<()>(),
@@ -141,7 +149,6 @@ impl GstreamserIced {
                         gst::MessageView::Error(err) => panic!("{:#?}", err),
                         gst::MessageView::Eos(_eos) => {
                             self.play_status = PlayStatus::Stop;
-                            self.source.set_state(gst::State::Null).unwrap();
                             break;
                         }
                         _ => {}
