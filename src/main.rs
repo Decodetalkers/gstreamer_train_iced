@@ -12,8 +12,9 @@ struct InitFlage {
 fn main() -> iced::Result {
     GstreamserIcedProgram::run(Settings {
         flags: InitFlage {
-            url: "http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4"
-                .to_string(),
+            url:
+                "http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4"
+                    .to_string(),
         },
         ..Settings::default()
     })
@@ -72,7 +73,6 @@ impl Application for GstreamserIcedProgram {
     fn new(flags: Self::Flags) -> (Self, Command<Self::Message>) {
         let frame = GstreamserIced::new_url(flags.url.as_str(), true);
 
-        // after get the information, paused it
         (Self { frame }, Command::none())
     }
 }
