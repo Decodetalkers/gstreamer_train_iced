@@ -27,8 +27,8 @@ pub struct GstreamserIced {
     source: gst::Bin,
     play_status: PlayStatus,
     rv: Arc<AsyncMutex<mpsc::Receiver<GStreamerMessage>>>,
-    duration: u64,
-    position: u64,
+    duration: std::time::Duration,
+    position: std::time::Duration,
     info_get: bool,
 }
 
@@ -103,8 +103,20 @@ impl Drop for GstreamserIced {
 }
 
 impl GstreamserIced {
-    pub fn duration(&self) -> u64 {
+    pub fn duration(&self) -> std::time::Duration {
         self.duration
+    }
+
+    pub fn position(&self) -> std::time::Duration {
+        self.position
+    }
+
+    pub fn duration_nanos(&self) -> u128 {
+        self.duration.as_nanos()
+    }
+
+    pub fn position_nanos(&self) -> u128 {
+        self.position.as_nanos()
     }
 
     pub fn seek<T>(&mut self, position: T) -> Result<(), Error>
@@ -187,8 +199,8 @@ impl GstreamserIced {
             source,
             play_status: PlayStatus::Stop,
             rv: Arc::new(AsyncMutex::new(rv)),
-            duration: 0,
-            position: 0,
+            duration: std::time::Duration::from_nanos(0),
+            position: std::time::Duration::from_nanos(0),
             info_get: islive,
         })
     }
@@ -223,19 +235,21 @@ impl GstreamserIced {
             GStreamerMessage::Update => {
                 // get the info in the first time of dispatch
                 if self.info_get {
-                    self.duration = self
-                        .source
-                        .query_duration::<gst::ClockTime>()
-                        .unwrap()
-                        .nseconds();
+                    self.duration = std::time::Duration::from_nanos(
+                        self.source
+                            .query_duration::<gst::ClockTime>()
+                            .unwrap()
+                            .nseconds(),
+                    );
                     self.info_get = false;
                 }
-                if self.duration != 0 {
-                    self.position = self
-                        .source
-                        .query_position::<gst::ClockTime>()
-                        .unwrap()
-                        .nseconds();
+                if self.duration.as_nanos() != 0 {
+                    self.position = std::time::Duration::from_nanos(
+                        self.source
+                            .query_position::<gst::ClockTime>()
+                            .unwrap()
+                            .nseconds(),
+                    );
                 }
                 for msg in self.bus.iter() {
                     match msg.view() {
