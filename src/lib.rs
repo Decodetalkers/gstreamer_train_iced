@@ -17,7 +17,8 @@ static MEDIA_PLAYER: &[u8] = include_bytes!("../resource/popandpipi.jpg");
 #[derive(Debug, Clone, Copy)]
 pub enum PlayStatus {
     Stop,
-    Start,
+    Playing,
+    End,
 }
 
 #[derive(Debug)]
@@ -133,6 +134,11 @@ impl GstreamerIced {
     {
         self.source
             .seek_simple(gst::SeekFlags::FLUSH, position.into())?;
+
+        if let PlayStatus::End = self.play_status {
+            self.play_status = PlayStatus::Playing;
+        }
+
         Ok(())
     }
 
@@ -152,7 +158,7 @@ impl GstreamerIced {
     }
 
     fn is_playing(&self) -> bool {
-        matches!(self.play_status, PlayStatus::Start)
+        matches!(self.play_status, PlayStatus::Playing)
     }
 
     pub fn new_url(url: &url::Url, islive: bool) -> Result<Self, Error> {
@@ -257,18 +263,22 @@ impl GstreamerIced {
                     self.info_get_started = false;
                 }
                 if self.duration.as_nanos() != 0 {
-                    self.position = std::time::Duration::from_nanos(
+                    loop {
+                        if let Some(time) = self.source.query_position::<gst::ClockTime>() {
+                            self.position = std::time::Duration::from_nanos(time.nseconds());
+                            break;
+                        }
                         self.source
-                            .query_position::<gst::ClockTime>()
-                            .unwrap()
-                            .nseconds(),
-                    );
+                            .state(gst::ClockTime::from_seconds(5))
+                            .0
+                            .unwrap();
+                    }
                 }
                 for msg in self.bus.iter() {
                     match msg.view() {
                         gst::MessageView::Error(err) => panic!("{:#?}", err),
                         gst::MessageView::Eos(_eos) => {
-                            self.play_status = PlayStatus::Stop;
+                            self.play_status = PlayStatus::End;
                             break;
                         }
                         _ => {}
@@ -277,12 +287,13 @@ impl GstreamerIced {
             }
             GStreamerMessage::PlayStatusChanged(status) => {
                 match status {
-                    PlayStatus::Start => {
+                    PlayStatus::Playing => {
                         self.source.set_state(gst::State::Playing).unwrap();
                     }
                     PlayStatus::Stop => {
                         self.source.set_state(gst::State::Paused).unwrap();
                     }
+                    _ => {}
                 }
                 self.play_status = status;
             }

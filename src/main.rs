@@ -49,10 +49,10 @@ impl Application for GstreamerIcedProgram {
         let pos = (self.frame.position_seconds() / 8.0) as u8;
 
         let btn: Element<Self::Message> = match self.frame.play_status() {
-            PlayStatus::Stop => button(text("|>")).on_press(GStreamerIcedMessage::Gst(
-                GStreamerMessage::PlayStatusChanged(PlayStatus::Start),
-            )),
-            PlayStatus::Start => button(text("[]")).on_press(GStreamerIcedMessage::Gst(
+            PlayStatus::Stop | PlayStatus::End => button(text("|>")).on_press(
+                GStreamerIcedMessage::Gst(GStreamerMessage::PlayStatusChanged(PlayStatus::Playing)),
+            ),
+            PlayStatus::Playing => button(text("[]")).on_press(GStreamerIcedMessage::Gst(
                 GStreamerMessage::PlayStatusChanged(PlayStatus::Stop),
             )),
         }
@@ -75,10 +75,21 @@ impl Application for GstreamerIcedProgram {
     }
 
     fn update(&mut self, message: Self::Message) -> iced::Command<Self::Message> {
-        if let GStreamerIcedMessage::Gst(message) = message {
-            self.frame.update(message).map(GStreamerIcedMessage::Gst)
-        } else {
-            Command::none()
+        match message {
+            GStreamerIcedMessage::Gst(message) => {
+                self.frame.update(message).map(GStreamerIcedMessage::Gst)
+            }
+            GStreamerIcedMessage::Jump(step) => {
+                self.frame
+                    .seek(Position::from(std::time::Duration::from_secs(
+                        step as u64 * 8,
+                    )))
+                    .unwrap();
+                Command::perform(
+                    async { GStreamerMessage::Update },
+                    GStreamerIcedMessage::Gst,
+                )
+            }
         }
     }
 
