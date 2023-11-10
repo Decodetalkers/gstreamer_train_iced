@@ -172,21 +172,14 @@ impl GstreamerIced {
     }
 
     /// Accept a pipewire stream
-    pub fn new_pipewire(path: &str) -> Result<Self, Error> {
+    pub fn new_pipewire(path: u32) -> Result<Self, Error> {
         gst::init()?;
-        let source = gst::parse_launch(&format!("pipewiresrc path=\"{}\" video-sink=\"videoconvert ! videoscale ! appsink name=app_sink caps=video/x-raw,format=RGBA,pixel-aspect-ratio=1/1\"", path))?;
+
+        let source = gst::parse_launch(&format!("pipewiresrc path=\"{}\" videoconvert ! videoscale ! appsink name=app_sink caps=video/x-raw,format=RGBA,pixel-aspect-ratio=1/1", path))?;
+
         let source = source.downcast::<gst::Bin>().unwrap();
 
-        let video_sink: gst::Element = source.property("video-sink");
-        let pad = video_sink.pads().get(0).cloned().unwrap();
-        let pad = pad.dynamic_cast::<gst::GhostPad>().unwrap();
-        let bin = pad
-            .parent_element()
-            .unwrap()
-            .downcast::<gst::Bin>()
-            .unwrap();
-
-        let app_sink = bin.by_name("app_sink").unwrap();
+        let app_sink = source.by_name("app_sink").unwrap();
         let app_sink = app_sink.downcast::<gst_app::AppSink>().unwrap();
         let frame: Arc<Mutex<Option<image::Handle>>> = Arc::new(Mutex::new(None));
         let frame_ref = Arc::clone(&frame);
