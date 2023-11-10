@@ -29,7 +29,7 @@ pub struct GstreamerIced {
     rv: Arc<AsyncMutex<mpsc::Receiver<GStreamerMessage>>>,
     duration: std::time::Duration,
     position: std::time::Duration,
-    info_get: bool,
+    info_get_started: bool,
 }
 
 #[derive(Debug, Error)]
@@ -111,8 +111,16 @@ impl GstreamerIced {
         self.position
     }
 
-    pub fn duration_nanos(&self) -> u128 {
-        self.duration.as_nanos()
+    pub fn duration_seconds(&self) -> f64 {
+        self.duration.as_secs_f64()
+    }
+
+    pub fn position_seconds(&self) -> f64 {
+        self.position.as_secs_f64()
+    }
+
+    pub fn duration_nanos(&self) -> f64 {
+        self.duration.as_secs_f64()
     }
 
     pub fn position_nanos(&self) -> u128 {
@@ -201,7 +209,7 @@ impl GstreamerIced {
             rv: Arc::new(AsyncMutex::new(rv)),
             duration: std::time::Duration::from_nanos(0),
             position: std::time::Duration::from_nanos(0),
-            info_get: islive,
+            info_get_started: !islive,
         })
     }
 
@@ -234,14 +242,19 @@ impl GstreamerIced {
         match message {
             GStreamerMessage::Update => {
                 // get the info in the first time of dispatch
-                if self.info_get {
-                    self.duration = std::time::Duration::from_nanos(
+                if self.info_get_started {
+                    loop {
                         self.source
-                            .query_duration::<gst::ClockTime>()
-                            .unwrap()
-                            .nseconds(),
-                    );
-                    self.info_get = false;
+                            .state(gst::ClockTime::from_seconds(5))
+                            .0
+                            .unwrap();
+
+                        if let Some(time) = self.source.query_duration::<gst::ClockTime>() {
+                            self.duration = std::time::Duration::from_nanos(time.nseconds());
+                            break;
+                        }
+                    }
+                    self.info_get_started = false;
                 }
                 if self.duration.as_nanos() != 0 {
                     self.position = std::time::Duration::from_nanos(

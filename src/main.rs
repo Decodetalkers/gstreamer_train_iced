@@ -1,4 +1,4 @@
-use iced::widget::{button, column, text, Image};
+use iced::widget::{button, column, slider, text, Image};
 use iced::{executor, widget::container, Application, Theme};
 use iced::{Command, Element, Length, Settings};
 
@@ -14,7 +14,8 @@ fn main() -> iced::Result {
         flags: InitFlage {
             url: Some(
                 url::Url::parse(
-                    "https://gstreamer.freedesktop.org/data/media/sintel_trailer-480p.webm",
+                    "http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4",
+                    //"https://gstreamer.freedesktop.org/data/media/sintel_trailer-480p.webm",
                 )
                 .unwrap(),
             ),
@@ -27,6 +28,11 @@ fn main() -> iced::Result {
 struct GstreamerIcedProgram {
     frame: GstreamerIced,
 }
+#[derive(Debug, Clone, Copy)]
+enum GStreamerIcedMessage {
+    Gst(GStreamerMessage),
+    Jump(u8),
+}
 
 #[derive(Debug, Clone, Copy)]
 struct GstreamerUpdate;
@@ -35,23 +41,30 @@ impl Application for GstreamerIcedProgram {
     type Theme = Theme;
     type Flags = InitFlage;
     type Executor = executor::Default;
-    type Message = GStreamerMessage;
+    type Message = GStreamerIcedMessage;
 
     fn view(&self) -> iced::Element<Self::Message> {
         let frame = self.frame.frame_handle();
+        let duration = (self.frame.duration_seconds() / 8.0) as u8;
+        let pos = (self.frame.position_seconds() / 8.0) as u8;
 
-        let btn: Element<Self::Message> =
-            match self.frame.play_status() {
-                PlayStatus::Stop => button(text("|>"))
-                    .on_press(GStreamerMessage::PlayStatusChanged(PlayStatus::Start)),
-                PlayStatus::Start => button(text("[]"))
-                    .on_press(GStreamerMessage::PlayStatusChanged(PlayStatus::Stop)),
-            }
-            .into();
+        let btn: Element<Self::Message> = match self.frame.play_status() {
+            PlayStatus::Stop => button(text("|>")).on_press(GStreamerIcedMessage::Gst(
+                GStreamerMessage::PlayStatusChanged(PlayStatus::Start),
+            )),
+            PlayStatus::Start => button(text("[]")).on_press(GStreamerIcedMessage::Gst(
+                GStreamerMessage::PlayStatusChanged(PlayStatus::Stop),
+            )),
+        }
+        .into();
         let video = Image::new(frame).width(Length::Fill);
+        let sild: Element<Self::Message> = slider(0..=duration, pos, GStreamerIcedMessage::Jump)
+            .width(Length::Fill)
+            .into();
 
         container(column![
             video,
+            sild,
             container(btn).width(Length::Fill).center_x()
         ])
         .width(Length::Fill)
@@ -62,7 +75,11 @@ impl Application for GstreamerIcedProgram {
     }
 
     fn update(&mut self, message: Self::Message) -> iced::Command<Self::Message> {
-        self.frame.update(message)
+        if let GStreamerIcedMessage::Gst(message) = message {
+            self.frame.update(message).map(GStreamerIcedMessage::Gst)
+        } else {
+            Command::none()
+        }
     }
 
     fn title(&self) -> String {
@@ -70,7 +87,7 @@ impl Application for GstreamerIcedProgram {
     }
 
     fn subscription(&self) -> iced::Subscription<Self::Message> {
-        self.frame.subscription()
+        self.frame.subscription().map(GStreamerIcedMessage::Gst)
     }
 
     fn new(flags: Self::Flags) -> (Self, Command<Self::Message>) {
