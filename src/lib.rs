@@ -21,7 +21,7 @@ pub enum PlayStatus {
 }
 
 #[derive(Debug)]
-pub struct GstreamserIced {
+pub struct GstreamerIced {
     frame: Arc<Mutex<Option<image::Handle>>>, //pipeline: gst::Pipeline,
     bus: gst::Bus,
     source: gst::Bin,
@@ -94,7 +94,7 @@ pub enum GStreamerMessage {
     PlayStatusChanged(PlayStatus),
 }
 
-impl Drop for GstreamserIced {
+impl Drop for GstreamerIced {
     fn drop(&mut self) {
         self.source
             .set_state(gst::State::Null)
@@ -102,7 +102,7 @@ impl Drop for GstreamserIced {
     }
 }
 
-impl GstreamserIced {
+impl GstreamerIced {
     pub fn duration(&self) -> std::time::Duration {
         self.duration
     }

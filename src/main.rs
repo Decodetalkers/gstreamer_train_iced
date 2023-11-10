@@ -10,7 +10,7 @@ struct InitFlage {
 }
 
 fn main() -> iced::Result {
-    GstreamserIcedProgram::run(Settings {
+    GstreamerIcedProgram::run(Settings {
         flags: InitFlage {
             url: Some(
                 url::Url::parse(
@@ -24,14 +24,14 @@ fn main() -> iced::Result {
 }
 
 #[derive(Debug)]
-struct GstreamserIcedProgram {
-    frame: GstreamserIced,
+struct GstreamerIcedProgram {
+    frame: GstreamerIced,
 }
 
 #[derive(Debug, Clone, Copy)]
 struct GstreamerUpdate;
 
-impl Application for GstreamserIcedProgram {
+impl Application for GstreamerIcedProgram {
     type Theme = Theme;
     type Flags = InitFlage;
     type Executor = executor::Default;
@@ -66,7 +66,7 @@ impl Application for GstreamserIcedProgram {
     }
 
     fn title(&self) -> String {
-        "Iced ffmpeg".to_string()
+        "Iced Gstreamer".to_string()
     }
 
     fn subscription(&self) -> iced::Subscription<Self::Message> {
@@ -74,7 +74,7 @@ impl Application for GstreamserIcedProgram {
     }
 
     fn new(flags: Self::Flags) -> (Self, Command<Self::Message>) {
-        let frame = GstreamserIced::new_url(flags.url.as_ref().unwrap(), false).unwrap();
+        let frame = GstreamerIced::new_url(flags.url.as_ref().unwrap(), false).unwrap();
 
         (Self { frame }, Command::none())
     }
