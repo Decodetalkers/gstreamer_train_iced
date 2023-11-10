@@ -32,6 +32,7 @@ struct GstreamerIcedProgram {
 enum GStreamerIcedMessage {
     Gst(GStreamerMessage),
     Jump(u8),
+    VolChange(f64),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -62,9 +63,15 @@ impl Application for GstreamerIcedProgram {
         let video = Image::new(frame).width(Length::Fill);
 
         let pos_status = text(format!("{:.1} s/{:.1} s", current_pos, fullduration));
-        let du_silder: Element<Self::Message> =
-            slider(0..=duration, pos, GStreamerIcedMessage::Jump).into();
-        let duration_component = row![pos_status, du_silder]
+        let du_silder = slider(0..=duration, pos, GStreamerIcedMessage::Jump);
+
+        let add_vol = button(text("+")).on_press(GStreamerIcedMessage::VolChange(0.1));
+        let min_vol = button(text("-")).on_press(GStreamerIcedMessage::VolChange(-0.1));
+        let volcurrent = self.frame.volume() * 100.0;
+
+        let voicetext = text(format!("{:.0} %", volcurrent));
+
+        let duration_component = row![pos_status, du_silder, voicetext, add_vol, min_vol]
             .spacing(2)
             .padding(2)
             .width(Length::Fill);
@@ -90,6 +97,17 @@ impl Application for GstreamerIcedProgram {
                 self.frame
                     .seek(std::time::Duration::from_secs(step as u64 * 8))
                     .unwrap();
+                Command::perform(
+                    async { GStreamerMessage::Update },
+                    GStreamerIcedMessage::Gst,
+                )
+            }
+            GStreamerIcedMessage::VolChange(vol) => {
+                let currentvol = self.frame.volume();
+                let newvol = currentvol + vol;
+                if newvol >= 0.0 {
+                    self.frame.set_volume(newvol);
+                }
                 Command::perform(
                     async { GStreamerMessage::Update },
                     GStreamerIcedMessage::Gst,
