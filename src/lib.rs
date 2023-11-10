@@ -130,10 +130,11 @@ impl GstreamerIced {
 
     pub fn seek<T>(&mut self, position: T) -> Result<(), Error>
     where
-        T: Into<GenericFormattedValue>,
+        T: Into<Position>,
     {
-        self.source
-            .seek_simple(gst::SeekFlags::FLUSH, position.into())?;
+        let pos: Position = position.into();
+        let positon: GenericFormattedValue = pos.into();
+        self.source.seek_simple(gst::SeekFlags::FLUSH, positon)?;
 
         if let PlayStatus::End = self.play_status {
             self.play_status = PlayStatus::Playing;

@@ -81,9 +81,7 @@ impl Application for GstreamerIcedProgram {
             }
             GStreamerIcedMessage::Jump(step) => {
                 self.frame
-                    .seek(Position::from(std::time::Duration::from_secs(
-                        step as u64 * 8,
-                    )))
+                    .seek(std::time::Duration::from_secs(step as u64 * 8))
                     .unwrap();
                 Command::perform(
                     async { GStreamerMessage::Update },
