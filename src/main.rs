@@ -1,4 +1,4 @@
-use iced::widget::{button, column, slider, text, Image};
+use iced::widget::{button, column, row, slider, text, Image};
 use iced::{executor, widget::container, Application, Theme};
 use iced::{Command, Element, Length, Settings};
 
@@ -45,8 +45,10 @@ impl Application for GstreamerIcedProgram {
 
     fn view(&self) -> iced::Element<Self::Message> {
         let frame = self.frame.frame_handle();
-        let duration = (self.frame.duration_seconds() / 8.0) as u8;
-        let pos = (self.frame.position_seconds() / 8.0) as u8;
+        let fullduration = self.frame.duration_seconds();
+        let current_pos = self.frame.position_seconds();
+        let duration = (fullduration / 8.0) as u8;
+        let pos = (current_pos / 8.0) as u8;
 
         let btn: Element<Self::Message> = match self.frame.play_status() {
             PlayStatus::Stop | PlayStatus::End => button(text("|>")).on_press(
@@ -58,13 +60,18 @@ impl Application for GstreamerIcedProgram {
         }
         .into();
         let video = Image::new(frame).width(Length::Fill);
-        let sild: Element<Self::Message> = slider(0..=duration, pos, GStreamerIcedMessage::Jump)
-            .width(Length::Fill)
-            .into();
+
+        let pos_status = text(format!("{:.1} s/{:.1} s", current_pos, fullduration));
+        let du_silder: Element<Self::Message> =
+            slider(0..=duration, pos, GStreamerIcedMessage::Jump).into();
+        let duration_component = row![pos_status, du_silder]
+            .spacing(2)
+            .padding(2)
+            .width(Length::Fill);
 
         container(column![
             video,
-            sild,
+            duration_component,
             container(btn).width(Length::Fill).center_x()
         ])
         .width(Length::Fill)

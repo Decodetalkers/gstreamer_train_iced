@@ -31,6 +31,7 @@ pub struct GstreamerIced {
     duration: std::time::Duration,
     position: std::time::Duration,
     info_get_started: bool,
+    volume: f64,
 }
 
 #[derive(Debug, Error)]
@@ -104,6 +105,14 @@ impl Drop for GstreamerIced {
 }
 
 impl GstreamerIced {
+    pub fn volume(&self) -> f64 {
+        self.volume
+    }
+
+    pub fn set_volume(&mut self, volume: f64) {
+        self.source.set_property("volume", volume);
+    }
+
     pub fn duration(&self) -> std::time::Duration {
         self.duration
     }
@@ -219,6 +228,7 @@ impl GstreamerIced {
             duration: std::time::Duration::from_nanos(0),
             position: std::time::Duration::from_nanos(0),
             info_get_started: true,
+            volume: 0_f64,
         })
     }
 
@@ -277,6 +287,7 @@ impl GstreamerIced {
             duration: std::time::Duration::from_nanos(0),
             position: std::time::Duration::from_nanos(0),
             info_get_started: !islive,
+            volume: 0_f64,
         })
     }
 
@@ -335,6 +346,7 @@ impl GstreamerIced {
                             .unwrap();
                     }
                 }
+                self.volume = self.source.property("volume");
                 for msg in self.bus.iter() {
                     match msg.view() {
                         gst::MessageView::Error(err) => panic!("{:#?}", err),
