@@ -162,6 +162,66 @@ impl GstreamerIced {
         matches!(self.play_status, PlayStatus::Playing)
     }
 
+    /// Accept a pipewire stream
+    pub fn new_pipewire(path: &str) -> Result<Self, Error> {
+        gst::init()?;
+        let source = gst::parse_launch(&format!("pipewiresrc path=\"{}\" video-sink=\"videoconvert ! videoscale ! appsink name=app_sink caps=video/x-raw,format=RGBA,pixel-aspect-ratio=1/1\"", path))?;
+        let source = source.downcast::<gst::Bin>().unwrap();
+
+        let video_sink: gst::Element = source.property("video-sink");
+        let pad = video_sink.pads().get(0).cloned().unwrap();
+        let pad = pad.dynamic_cast::<gst::GhostPad>().unwrap();
+        let bin = pad
+            .parent_element()
+            .unwrap()
+            .downcast::<gst::Bin>()
+            .unwrap();
+
+        let app_sink = bin.by_name("app_sink").unwrap();
+        let app_sink = app_sink.downcast::<gst_app::AppSink>().unwrap();
+        let frame: Arc<Mutex<Option<image::Handle>>> = Arc::new(Mutex::new(None));
+        let frame_ref = Arc::clone(&frame);
+
+        let (sd, rv) = mpsc::channel::<GStreamerMessage>();
+        app_sink.set_callbacks(
+            gst_app::AppSinkCallbacks::builder()
+                .new_sample(move |sink| {
+                    let sample = sink.pull_sample().map_err(|_| gst::FlowError::Eos)?;
+                    let buffer = sample.buffer().ok_or(gst::FlowError::Error)?;
+                    let map = buffer.map_readable().map_err(|_| gst::FlowError::Error)?;
+
+                    let pad = sink.static_pad("sink").ok_or(gst::FlowError::Error)?;
+
+                    let caps = pad.current_caps().ok_or(gst::FlowError::Error)?;
+                    let s = caps.structure(0).ok_or(gst::FlowError::Error)?;
+                    let width = s.get::<i32>("width").map_err(|_| gst::FlowError::Error)?;
+                    let height = s.get::<i32>("height").map_err(|_| gst::FlowError::Error)?;
+
+                    *frame_ref.lock().map_err(|_| gst::FlowError::Error)? =
+                        Some(image::Handle::from_pixels(
+                            width as _,
+                            height as _,
+                            map.as_slice().to_owned(),
+                        ));
+                    sd.send(GStreamerMessage::FrameUpdate).ok();
+                    Ok(gst::FlowSuccess::Ok)
+                })
+                .build(),
+        );
+        source.set_state(gst::State::Playing)?;
+
+        Ok(Self {
+            frame,
+            bus: source.bus().unwrap(),
+            source,
+            play_status: PlayStatus::Playing,
+            rv: Arc::new(AsyncMutex::new(rv)),
+            duration: std::time::Duration::from_nanos(0),
+            position: std::time::Duration::from_nanos(0),
+            info_get_started: true,
+        })
+    }
+
     pub fn new_url(url: &url::Url, islive: bool) -> Result<Self, Error> {
         gst::init()?;
         let source = gst::parse_launch(&format!("playbin uri=\"{}\" video-sink=\"videoconvert ! videoscale ! appsink name=app_sink caps=video/x-raw,format=RGBA,pixel-aspect-ratio=1/1\"", url.as_str()))?;
