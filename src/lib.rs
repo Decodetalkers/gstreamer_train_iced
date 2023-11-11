@@ -247,7 +247,7 @@ impl GstreamerIced {
 
                     let pad = sink.static_pad("sink").ok_or(gst::FlowError::Error)?;
 
-                    let caps = pad.current_caps().ok_or(gst::FlowError::Error)?;
+                    let caps = pad.caps().ok_or(gst::FlowError::Error)?;
                     let s = caps.structure(0).ok_or(gst::FlowError::Error)?;
                     let width = s.get::<i32>("width").map_err(|_| gst::FlowError::Error)?;
                     let height = s.get::<i32>("height").map_err(|_| gst::FlowError::Error)?;
@@ -315,7 +315,7 @@ impl GstreamerIced {
 
                     let pad = sink.static_pad("sink").ok_or(gst::FlowError::Error)?;
 
-                    let caps = pad.current_caps().ok_or(gst::FlowError::Error)?;
+                    let caps = pad.caps().ok_or(gst::FlowError::Error)?;
                     let s = caps.structure(0).ok_or(gst::FlowError::Error)?;
                     let width = s.get::<i32>("width").map_err(|_| gst::FlowError::Error)?;
                     let height = s.get::<i32>("height").map_err(|_| gst::FlowError::Error)?;
