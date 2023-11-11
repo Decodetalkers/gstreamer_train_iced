@@ -32,6 +32,7 @@ pub struct GstreamerIced {
     position: std::time::Duration,
     info_get_started: bool,
     volume: f64,
+    is_pipewire: bool,
 }
 
 #[derive(Debug, Error)]
@@ -110,6 +111,9 @@ impl GstreamerIced {
     }
 
     pub fn set_volume(&mut self, volume: f64) {
+        if self.is_pipewire {
+            return;
+        }
         self.source.set_property("volume", volume);
     }
 
@@ -141,6 +145,9 @@ impl GstreamerIced {
     where
         T: Into<Position>,
     {
+        if self.is_pipewire {
+            return Ok(());
+        }
         let pos: Position = position.into();
         let positon: GenericFormattedValue = pos.into();
         self.source.seek_simple(gst::SeekFlags::FLUSH, positon)?;
@@ -175,7 +182,7 @@ impl GstreamerIced {
     pub fn new_pipewire(path: u32) -> Result<Self, Error> {
         gst::init()?;
 
-        let source = gst::parse_launch(&format!("pipewiresrc path=\"{}\" videoconvert ! videoscale ! appsink name=app_sink caps=video/x-raw,format=RGBA,pixel-aspect-ratio=1/1", path))?;
+        let source = gst::parse_launch(&format!("pipewiresrc path=\"{}\" ! videoconvert ! videoscale ! appsink name=app_sink caps=video/x-raw,format=RGBA,pixel-aspect-ratio=1/1 ", path))?;
 
         let source = source.downcast::<gst::Bin>().unwrap();
 
@@ -198,7 +205,6 @@ impl GstreamerIced {
                     let s = caps.structure(0).ok_or(gst::FlowError::Error)?;
                     let width = s.get::<i32>("width").map_err(|_| gst::FlowError::Error)?;
                     let height = s.get::<i32>("height").map_err(|_| gst::FlowError::Error)?;
-
                     *frame_ref.lock().map_err(|_| gst::FlowError::Error)? =
                         Some(image::Handle::from_pixels(
                             width as _,
@@ -211,6 +217,7 @@ impl GstreamerIced {
                 .build(),
         );
         source.set_state(gst::State::Playing)?;
+        println!("end");
 
         Ok(Self {
             frame,
@@ -222,6 +229,7 @@ impl GstreamerIced {
             position: std::time::Duration::from_nanos(0),
             info_get_started: true,
             volume: 0_f64,
+            is_pipewire: true,
         })
     }
 
@@ -281,6 +289,7 @@ impl GstreamerIced {
             position: std::time::Duration::from_nanos(0),
             info_get_started: !islive,
             volume: 0_f64,
+            is_pipewire: false,
         })
     }
 
@@ -313,33 +322,36 @@ impl GstreamerIced {
         match message {
             GStreamerMessage::Update => {
                 // get the info in the first time of dispatch
-                if self.info_get_started {
-                    loop {
-                        self.source
-                            .state(gst::ClockTime::from_seconds(5))
-                            .0
-                            .unwrap();
+                if !self.is_pipewire {
+                    if self.info_get_started {
+                        loop {
+                            self.source
+                                .state(gst::ClockTime::from_seconds(5))
+                                .0
+                                .unwrap();
 
-                        if let Some(time) = self.source.query_duration::<gst::ClockTime>() {
-                            self.duration = std::time::Duration::from_nanos(time.nseconds());
-                            break;
+                            if let Some(time) = self.source.query_duration::<gst::ClockTime>() {
+                                self.duration = std::time::Duration::from_nanos(time.nseconds());
+                                break;
+                            }
+                        }
+                        self.info_get_started = false;
+                    }
+                    if self.duration.as_nanos() != 0 {
+                        loop {
+                            if let Some(time) = self.source.query_position::<gst::ClockTime>() {
+                                self.position = std::time::Duration::from_nanos(time.nseconds());
+                                break;
+                            }
+                            self.source
+                                .state(gst::ClockTime::from_seconds(5))
+                                .0
+                                .unwrap();
                         }
                     }
-                    self.info_get_started = false;
+                    self.volume = self.source.property("volume");
                 }
-                if self.duration.as_nanos() != 0 {
-                    loop {
-                        if let Some(time) = self.source.query_position::<gst::ClockTime>() {
-                            self.position = std::time::Duration::from_nanos(time.nseconds());
-                            break;
-                        }
-                        self.source
-                            .state(gst::ClockTime::from_seconds(5))
-                            .0
-                            .unwrap();
-                    }
-                }
-                self.volume = self.source.property("volume");
+
                 for msg in self.bus.iter() {
                     match msg.view() {
                         gst::MessageView::Error(err) => panic!("{:#?}", err),
