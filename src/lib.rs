@@ -16,8 +16,6 @@ pub mod reexport {
     pub use url;
 }
 
-static MEDIA_PLAYER: &[u8] = include_bytes!("../resource/popandpipi.jpg");
-
 #[derive(Debug, Clone, Copy)]
 pub enum PlayStatus {
     Stop,
@@ -172,15 +170,8 @@ impl GstreamerIced {
     }
 
     /// return an [image::Handle], you can use it to make image
-    pub fn frame_handle(&self) -> image::Handle {
-        self.frame
-            .lock()
-            .map(|frame| {
-                frame
-                    .clone()
-                    .unwrap_or(image::Handle::from_memory(MEDIA_PLAYER))
-            })
-            .unwrap_or(image::Handle::from_memory(MEDIA_PLAYER))
+    pub fn frame_handle(&self) -> Option<image::Handle> {
+        self.frame.lock().map(|frame| frame.clone()).unwrap_or(None)
     }
 
     /// what the playing status is
@@ -313,7 +304,7 @@ impl GstreamerIced {
         if self.is_playing() {
             let rv = self.rv.clone();
             iced::Subscription::batch([
-                iced::time::every(std::time::Duration::from_secs_f64(0.01))
+                iced::time::every(std::time::Duration::from_secs_f64(0.05))
                     .map(|_| GStreamerMessage::Update),
                 iced::subscription::channel(
                     std::any::TypeId::of::<()>(),

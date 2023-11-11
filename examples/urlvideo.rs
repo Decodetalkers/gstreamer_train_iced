@@ -1,8 +1,10 @@
-use iced::widget::{button, column, row, slider, text, Image};
+use iced::widget::{button, column, image, row, slider, text, Image};
 use iced::{executor, widget::container, Application, Theme};
 use iced::{Command, Element, Length, Settings};
 
 use gstreamer_iced::*;
+
+static MEDIA_PLAYER: &[u8] = include_bytes!("../resource/popandpipi.jpg");
 
 #[derive(Debug, Default)]
 struct InitFlage {
@@ -14,8 +16,8 @@ fn main() -> iced::Result {
         flags: InitFlage {
             url: Some(
                 url::Url::parse(
-                    "http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4",
-                    //"https://gstreamer.freedesktop.org/data/media/sintel_trailer-480p.webm",
+                    //"http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4",
+                    "https://gstreamer.freedesktop.org/data/media/sintel_trailer-480p.webm",
                 )
                 .unwrap(),
             ),
@@ -45,7 +47,10 @@ impl Application for GstreamerIcedProgram {
     type Message = GStreamerIcedMessage;
 
     fn view(&self) -> iced::Element<Self::Message> {
-        let frame = self.frame.frame_handle();
+        let frame = self
+            .frame
+            .frame_handle()
+            .unwrap_or(image::Handle::from_memory(MEDIA_PLAYER));
         let fullduration = self.frame.duration_seconds();
         let current_pos = self.frame.position_seconds();
         let duration = (fullduration / 8.0) as u8;

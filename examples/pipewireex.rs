@@ -4,10 +4,11 @@ use ashpd::{
     WindowIdentifier,
 };
 
-use iced::widget::{button, column, row, slider, text, Image};
+use iced::widget::{button, column, image, row, slider, text, Image};
 use iced::{executor, widget::container, Application, Theme};
 use iced::{Command, Element, Length, Settings};
 
+static MEDIA_PLAYER: &[u8] = include_bytes!("../resource/popandpipi.jpg");
 use gstreamer_iced::*;
 
 async fn get_path() -> anyhow::Result<u32> {
@@ -70,7 +71,10 @@ impl Application for GstreamerIcedProgram {
     type Message = GStreamerIcedMessage;
 
     fn view(&self) -> iced::Element<Self::Message> {
-        let frame = self.frame.frame_handle();
+        let frame = self
+            .frame
+            .frame_handle()
+            .unwrap_or(image::Handle::from_memory(MEDIA_PLAYER));
         let fullduration = self.frame.duration_seconds();
         let current_pos = self.frame.position_seconds();
         let duration = (fullduration / 8.0) as u8;
