@@ -23,9 +23,28 @@ pub enum PlayStatus {
     End,
 }
 
+#[derive(Debug, Clone)]
+pub struct FrameData {
+    pub pixels: Vec<u8>,
+    pub width: u32,
+    pub height: u32,
+}
+
+impl From<FrameData> for image::Handle {
+    fn from(
+        FrameData {
+            pixels,
+            width,
+            height,
+        }: FrameData,
+    ) -> Self {
+        image::Handle::from_pixels(width, height, pixels)
+    }
+}
+
 #[derive(Debug)]
 pub struct GstreamerIced {
-    frame: Arc<Mutex<Option<image::Handle>>>, //pipeline: gst::Pipeline,
+    frame: Arc<Mutex<Option<FrameData>>>, //pipeline: gst::Pipeline,
     bus: gst::Bus,
     source: gst::Bin,
     play_status: PlayStatus,
@@ -171,6 +190,14 @@ impl GstreamerIced {
 
     /// return an [image::Handle], you can use it to make image
     pub fn frame_handle(&self) -> Option<image::Handle> {
+        self.frame
+            .lock()
+            .map(|frame| frame.clone().map(|f| f.into()))
+            .unwrap_or(None)
+    }
+
+    /// return [FrameData], you can directly access the data
+    pub fn frame_data(&self) -> Option<FrameData> {
         self.frame.lock().map(|frame| frame.clone()).unwrap_or(None)
     }
 
@@ -194,7 +221,7 @@ impl GstreamerIced {
 
         let app_sink = source.by_name("app_sink").unwrap();
         let app_sink = app_sink.downcast::<gst_app::AppSink>().unwrap();
-        let frame: Arc<Mutex<Option<image::Handle>>> = Arc::new(Mutex::new(None));
+        let frame: Arc<Mutex<Option<FrameData>>> = Arc::new(Mutex::new(None));
         let frame_ref = Arc::clone(&frame);
 
         let (sd, rv) = mpsc::channel::<GStreamerMessage>();
@@ -211,12 +238,11 @@ impl GstreamerIced {
                     let s = caps.structure(0).ok_or(gst::FlowError::Error)?;
                     let width = s.get::<i32>("width").map_err(|_| gst::FlowError::Error)?;
                     let height = s.get::<i32>("height").map_err(|_| gst::FlowError::Error)?;
-                    *frame_ref.lock().map_err(|_| gst::FlowError::Error)? =
-                        Some(image::Handle::from_pixels(
-                            width as _,
-                            height as _,
-                            map.as_slice().to_owned(),
-                        ));
+                    *frame_ref.lock().map_err(|_| gst::FlowError::Error)? = Some(FrameData {
+                        width: width as _,
+                        height: height as _,
+                        pixels: map.as_slice().to_owned(),
+                    });
                     sd.send(GStreamerMessage::FrameUpdate).ok();
                     Ok(gst::FlowSuccess::Ok)
                 })
@@ -255,7 +281,7 @@ impl GstreamerIced {
 
         let app_sink = bin.by_name("app_sink").unwrap();
         let app_sink = app_sink.downcast::<gst_app::AppSink>().unwrap();
-        let frame: Arc<Mutex<Option<image::Handle>>> = Arc::new(Mutex::new(None));
+        let frame: Arc<Mutex<Option<FrameData>>> = Arc::new(Mutex::new(None));
         let frame_ref = Arc::clone(&frame);
 
         let (sd, rv) = mpsc::channel::<GStreamerMessage>();
@@ -273,12 +299,11 @@ impl GstreamerIced {
                     let width = s.get::<i32>("width").map_err(|_| gst::FlowError::Error)?;
                     let height = s.get::<i32>("height").map_err(|_| gst::FlowError::Error)?;
 
-                    *frame_ref.lock().map_err(|_| gst::FlowError::Error)? =
-                        Some(image::Handle::from_pixels(
-                            width as _,
-                            height as _,
-                            map.as_slice().to_owned(),
-                        ));
+                    *frame_ref.lock().map_err(|_| gst::FlowError::Error)? = Some(FrameData {
+                        width: width as _,
+                        height: height as _,
+                        pixels: map.as_slice().to_owned(),
+                    });
                     sd.send(GStreamerMessage::FrameUpdate).ok();
                     Ok(gst::FlowSuccess::Ok)
                 })
