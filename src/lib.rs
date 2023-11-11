@@ -215,16 +215,29 @@ impl GstreamerIced {
     pub fn new_pipewire(path: u32) -> Result<Self, Error> {
         gst::init()?;
 
-        let source = gst::parse_launch(&format!("pipewiresrc path=\"{}\" ! videoconvert ! videoscale ! appsink name=app_sink caps=video/x-raw,format=RGBA,pixel-aspect-ratio=1/1 ", path))?;
+        let source = gst::Pipeline::new();
+        let pipewiresrc = gst::ElementFactory::make("pipewiresrc")
+            .property("path", path.to_string())
+            .build()?;
 
-        let source = source.downcast::<gst::Bin>().unwrap();
+        let videoconvert = gst::ElementFactory::make("videoconvert").build()?;
+        let videoscale = gst::ElementFactory::make("videoscale").build()?;
 
-        let app_sink = source.by_name("app_sink").unwrap();
-        let app_sink = app_sink.downcast::<gst_app::AppSink>().unwrap();
+        let app_sink_caps = gst::Caps::builder("video/x-raw")
+            .field("format", "RGBA")
+            .field("pixel-aspect-ratio", gst::Fraction::new(1, 1))
+            .build();
+
+        let app_sink: gst_app::AppSink = gst_app::AppSink::builder()
+            .name("app_sink")
+            .caps(&app_sink_caps)
+            .build();
+
         let frame: Arc<Mutex<Option<FrameData>>> = Arc::new(Mutex::new(None));
         let frame_ref = Arc::clone(&frame);
 
         let (sd, rv) = mpsc::channel::<GStreamerMessage>();
+
         app_sink.set_callbacks(
             gst_app::AppSinkCallbacks::builder()
                 .new_sample(move |sink| {
@@ -248,12 +261,20 @@ impl GstreamerIced {
                 })
                 .build(),
         );
+
+        let app_sink: gst::Element = app_sink.into();
+        source.add_many([&pipewiresrc, &videoconvert, &videoscale, &app_sink])?;
+
+        pipewiresrc.link(&videoconvert)?;
+        videoconvert.link(&videoscale)?;
+        videoscale.link(&app_sink)?;
+
         source.set_state(gst::State::Playing)?;
 
         Ok(Self {
             frame,
             bus: source.bus().unwrap(),
-            source,
+            source: source.into(),
             play_status: PlayStatus::Playing,
             rv: Arc::new(AsyncMutex::new(rv)),
             duration: std::time::Duration::from_nanos(0),
