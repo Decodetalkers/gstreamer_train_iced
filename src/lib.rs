@@ -265,9 +265,7 @@ impl GstreamerIced {
         let app_sink: gst::Element = app_sink.into();
         source.add_many([&pipewiresrc, &videoconvert, &videoscale, &app_sink])?;
 
-        pipewiresrc.link(&videoconvert)?;
-        videoconvert.link(&videoscale)?;
-        videoscale.link(&app_sink)?;
+        gst::Element::link_many([&pipewiresrc, &videoconvert, &videoscale, &app_sink])?;
 
         source.set_state(gst::State::Playing)?;
 
