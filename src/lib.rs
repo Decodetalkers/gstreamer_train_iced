@@ -12,6 +12,10 @@ use thiserror::Error;
 
 use std::sync::mpsc;
 
+pub mod reexport {
+    pub use url;
+}
+
 static MEDIA_PLAYER: &[u8] = include_bytes!("../resource/popandpipi.jpg");
 
 #[derive(Debug, Clone, Copy)]
@@ -297,7 +301,7 @@ impl GstreamerIced {
         if self.is_playing() {
             let rv = self.rv.clone();
             iced::Subscription::batch([
-                iced::time::every(std::time::Duration::from_secs_f64(0.05))
+                iced::time::every(std::time::Duration::from_secs_f64(0.01))
                     .map(|_| GStreamerMessage::Update),
                 iced::subscription::channel(
                     std::any::TypeId::of::<()>(),
