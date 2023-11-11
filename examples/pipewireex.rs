@@ -39,7 +39,6 @@ async fn get_path() -> anyhow::Result<u32> {
 #[tokio::main]
 async fn main() -> iced::Result {
     let path = get_path().await.unwrap();
-    println!("{}", path);
     GstreamerIcedProgram::run(Settings {
         flags: InitFlage { path },
         ..Settings::default()
