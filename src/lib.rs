@@ -4,6 +4,7 @@ use gst::GenericFormattedValue;
 use gstreamer as gst;
 use gstreamer_app as gst_app;
 use iced::futures::SinkExt;
+use iced::futures::StreamExt;
 use iced::widget::image;
 use iced::Command;
 use smol::lock::Mutex as AsyncMutex;
@@ -45,7 +46,7 @@ impl From<FrameData> for image::Handle {
 #[derive(Debug)]
 pub struct GstreamerIced {
     frame: Arc<Mutex<Option<FrameData>>>, //pipeline: gst::Pipeline,
-    bus: gst::Bus,
+    bus: Arc<AsyncMutex<gst::Bus>>,
     source: gst::Bin,
     play_status: PlayStatus,
     rv: Arc<AsyncMutex<mpsc::Receiver<GStreamerMessage>>>,
@@ -116,6 +117,7 @@ pub enum GStreamerMessage {
     Update,
     FrameUpdate,
     PlayStatusChanged(PlayStatus),
+    BusGoToEnd,
 }
 
 impl Drop for GstreamerIced {
@@ -271,7 +273,7 @@ impl GstreamerIced {
 
         Ok(Self {
             frame,
-            bus: source.bus().unwrap(),
+            bus: Arc::new(AsyncMutex::new(source.bus().unwrap())),
             source: source.into(),
             play_status: PlayStatus::Playing,
             rv: Arc::new(AsyncMutex::new(rv)),
@@ -349,7 +351,7 @@ impl GstreamerIced {
 
         Ok(Self {
             frame,
-            bus: source.bus().unwrap(),
+            bus: Arc::new(AsyncMutex::new(source.bus().unwrap())),
             source,
             play_status: PlayStatus::Stop,
             rv: Arc::new(AsyncMutex::new(rv)),
@@ -365,6 +367,8 @@ impl GstreamerIced {
     pub fn subscription(&self) -> iced::Subscription<GStreamerMessage> {
         if self.is_playing() {
             let rv = self.rv.clone();
+            let bus = self.bus.clone();
+            struct BusWatcher;
             iced::Subscription::batch([
                 iced::time::every(std::time::Duration::from_secs_f64(0.05))
                     .map(|_| GStreamerMessage::Update),
@@ -378,6 +382,25 @@ impl GstreamerIced {
                                 continue;
                             };
                             let _ = output.send(message).await;
+                        }
+                    },
+                ),
+                iced::subscription::channel(
+                    std::any::TypeId::of::<BusWatcher>(),
+                    100,
+                    |mut output| async move {
+                        let bus = bus.lock().await;
+                        let mut thebus = bus.stream();
+                        loop {
+                            if let Some(view) = thebus.next().await {
+                                match view.view() {
+                                    gst::MessageView::Error(err) => panic!("{:#?}", err),
+                                    gst::MessageView::Eos(_eos) => {
+                                        let _ = output.send(GStreamerMessage::BusGoToEnd).await;
+                                    }
+                                    _ => {}
+                                }
+                            }
                         }
                     },
                 ),
@@ -420,17 +443,6 @@ impl GstreamerIced {
                     }
                     self.volume = self.source.property("volume");
                 }
-
-                for msg in self.bus.iter() {
-                    match msg.view() {
-                        gst::MessageView::Error(err) => panic!("{:#?}", err),
-                        gst::MessageView::Eos(_eos) => {
-                            self.play_status = PlayStatus::End;
-                            break;
-                        }
-                        _ => {}
-                    }
-                }
             }
             GStreamerMessage::PlayStatusChanged(status) => {
                 match status {
@@ -443,6 +455,9 @@ impl GstreamerIced {
                     _ => {}
                 }
                 self.play_status = status;
+            }
+            GStreamerMessage::BusGoToEnd => {
+                self.play_status = PlayStatus::End;
             }
             _ => {}
         }
