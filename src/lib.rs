@@ -110,10 +110,12 @@ impl Drop for GstreamerIced {
 }
 
 impl GstreamerIced {
+    /// get the volume of the video
     pub fn volume(&self) -> f64 {
         self.volume
     }
 
+    /// only can be set when source is video
     pub fn set_volume(&mut self, volume: f64) {
         if self.is_pipewire {
             return;
@@ -121,26 +123,32 @@ impl GstreamerIced {
         self.source.set_property("volume", volume);
     }
 
+    /// get the duration, if is live or pipewire, it is 0
     pub fn duration(&self) -> std::time::Duration {
         self.duration
     }
 
+    /// where the video is now
     pub fn position(&self) -> std::time::Duration {
         self.position
     }
 
+    /// turn duration to seconds
     pub fn duration_seconds(&self) -> f64 {
         self.duration.as_secs_f64()
     }
 
+    /// turn position to seconds
     pub fn position_seconds(&self) -> f64 {
         self.position.as_secs_f64()
     }
 
+    /// turn duration to nanos
     pub fn duration_nanos(&self) -> f64 {
         self.duration.as_secs_f64()
     }
 
+    /// turn position to nanos
     pub fn position_nanos(&self) -> u128 {
         self.position.as_nanos()
     }
@@ -163,6 +171,7 @@ impl GstreamerIced {
         Ok(())
     }
 
+    /// return an [image::Handle], you can use it to make image
     pub fn frame_handle(&self) -> image::Handle {
         self.frame
             .lock()
@@ -174,6 +183,7 @@ impl GstreamerIced {
             .unwrap_or(image::Handle::from_memory(MEDIA_PLAYER))
     }
 
+    /// what the playing status is
     pub fn play_status(&self) -> &PlayStatus {
         &self.play_status
     }
@@ -182,7 +192,8 @@ impl GstreamerIced {
         matches!(self.play_status, PlayStatus::Playing)
     }
 
-    /// Accept a pipewire stream
+    /// Accept a pipewire stream, it accept a pipewire path, you may can get it from ashpd, it is
+    /// called node.
     pub fn new_pipewire(path: u32) -> Result<Self, Error> {
         gst::init()?;
 
@@ -236,6 +247,7 @@ impl GstreamerIced {
         })
     }
 
+    /// accept url like from local or from http
     pub fn new_url(url: &url::Url, islive: bool) -> Result<Self, Error> {
         gst::init()?;
         let source = gst::parse_launch(&format!("playbin uri=\"{}\" video-sink=\"videoconvert ! videoscale ! appsink name=app_sink caps=video/x-raw,format=RGBA,pixel-aspect-ratio=1/1\"", url.as_str()))?;
@@ -296,6 +308,7 @@ impl GstreamerIced {
         })
     }
 
+    /// get the subscription, you can use in iced::subscription
     pub fn subscription(&self) -> iced::Subscription<GStreamerMessage> {
         if self.is_playing() {
             let rv = self.rv.clone();
