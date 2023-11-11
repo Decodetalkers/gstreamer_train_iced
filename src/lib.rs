@@ -221,7 +221,6 @@ impl GstreamerIced {
                 .build(),
         );
         source.set_state(gst::State::Playing)?;
-        println!("end");
 
         Ok(Self {
             frame,
