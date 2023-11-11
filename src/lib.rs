@@ -286,24 +286,26 @@ impl GstreamerIced {
     /// accept url like from local or from http
     pub fn new_url(url: &url::Url, islive: bool) -> Result<Self, Error> {
         gst::init()?;
-        let source = gst::parse_launch(&format!("playbin uri=\"{}\" video-sink=\"videoconvert ! videoscale ! appsink name=app_sink caps=video/x-raw,format=RGBA,pixel-aspect-ratio=1/1\"", url.as_str()))?;
-        let source = source.downcast::<gst::Bin>().unwrap();
 
-        let video_sink: gst::Element = source.property("video-sink");
-        let pad = video_sink.pads().get(0).cloned().unwrap();
-        let pad = pad.dynamic_cast::<gst::GhostPad>().unwrap();
-        let bin = pad
-            .parent_element()
-            .unwrap()
-            .downcast::<gst::Bin>()
-            .unwrap();
+        let video_sink = gst::Bin::new();
+        let videoconvert = gst::ElementFactory::make("videoconvert").build()?;
+        let videoscale = gst::ElementFactory::make("videoscale").build()?;
 
-        let app_sink = bin.by_name("app_sink").unwrap();
-        let app_sink = app_sink.downcast::<gst_app::AppSink>().unwrap();
+        let app_sink_caps = gst::Caps::builder("video/x-raw")
+            .field("format", "RGBA")
+            .field("pixel-aspect-ratio", gst::Fraction::new(1, 1))
+            .build();
+
+        let app_sink: gst_app::AppSink = gst_app::AppSink::builder()
+            .name("app_sink")
+            .caps(&app_sink_caps)
+            .build();
+
         let frame: Arc<Mutex<Option<FrameData>>> = Arc::new(Mutex::new(None));
         let frame_ref = Arc::clone(&frame);
 
         let (sd, rv) = mpsc::channel::<GStreamerMessage>();
+
         app_sink.set_callbacks(
             gst_app::AppSinkCallbacks::builder()
                 .new_sample(move |sink| {
@@ -317,7 +319,6 @@ impl GstreamerIced {
                     let s = caps.structure(0).ok_or(gst::FlowError::Error)?;
                     let width = s.get::<i32>("width").map_err(|_| gst::FlowError::Error)?;
                     let height = s.get::<i32>("height").map_err(|_| gst::FlowError::Error)?;
-
                     *frame_ref.lock().map_err(|_| gst::FlowError::Error)? = Some(FrameData {
                         width: width as _,
                         height: height as _,
@@ -328,6 +329,23 @@ impl GstreamerIced {
                 })
                 .build(),
         );
+
+        let app_sink: gst::Element = app_sink.into();
+
+        video_sink.add_many([&videoconvert, &videoscale, &app_sink])?;
+        gst::Element::link_many([&videoconvert, &videoscale, &app_sink])?;
+
+        let staticpad = videoconvert.static_pad("sink").unwrap();
+        let sinkgost = gst::GhostPad::builder_with_target(&staticpad)?.build();
+        sinkgost.set_active(true)?;
+        video_sink.add_pad(&sinkgost)?;
+
+        let videosource = gst::ElementFactory::make("playbin")
+            .property("uri", url.as_str())
+            .property("video-sink", video_sink.to_value())
+            .build()?;
+
+        let source = videosource.downcast::<gst::Bin>().unwrap();
 
         Ok(Self {
             frame,
