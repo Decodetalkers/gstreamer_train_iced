@@ -1,4 +1,4 @@
-# GStreamer train
+# GStreamer iced
 
 ## Support GStreamer on video play and pipewire record
 
