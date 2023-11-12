@@ -412,6 +412,7 @@ impl GstreamerIced {
                 if !self.is_pipewire {
                     if self.info_get_started {
                         loop {
+                            // FIXME: move it to stream listener
                             self.source
                                 .state(gst::ClockTime::from_seconds(5))
                                 .0
