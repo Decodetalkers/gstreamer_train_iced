@@ -58,7 +58,6 @@ pub struct GstreamerIced<const X: usize> {
     position: std::time::Duration,
     info_get_started: bool,
     volume: f64,
-    is_pipewire: bool,
 }
 
 #[derive(Debug, Error)]
@@ -200,7 +199,6 @@ impl GstreamerIcedPipewire {
             position: std::time::Duration::from_nanos(0),
             info_get_started: true,
             volume: 0_f64,
-            is_pipewire: true,
         })
     }
 
@@ -316,7 +314,6 @@ impl GstreamerIcedBase {
             position: std::time::Duration::from_nanos(0),
             info_get_started: !islive,
             volume: 0_f64,
-            is_pipewire: false,
         })
     }
 
@@ -374,9 +371,7 @@ impl GstreamerIcedBase {
         }
         Command::none()
     }
-}
 
-impl<const X: usize> GstreamerIced<X> {
     /// get the volume of the video
     pub fn volume(&self) -> f64 {
         self.volume
@@ -384,9 +379,6 @@ impl<const X: usize> GstreamerIced<X> {
 
     /// only can be set when source is video
     pub fn set_volume(&mut self, volume: f64) {
-        if self.is_pipewire {
-            return;
-        }
         self.source.set_property("volume", volume);
     }
 
@@ -419,7 +411,9 @@ impl<const X: usize> GstreamerIced<X> {
     pub fn position_nanos(&self) -> u128 {
         self.position.as_nanos()
     }
+}
 
+impl<const X: usize> GstreamerIced<X> {
     /// return an [image::Handle], you can use it to make image
     pub fn frame_handle(&self) -> Option<image::Handle> {
         self.frame
