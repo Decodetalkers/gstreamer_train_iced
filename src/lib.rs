@@ -464,4 +464,13 @@ impl<const X: usize> GstreamerIced<X> {
         }
         Command::none()
     }
+
+    /// get the type name
+    pub fn gstreamer_type(&self) -> String {
+        match X {
+            0 => "base".to_owned(),
+            1 => "pipewire".to_owned(),
+            _ => unreachable!(),
+        }
+    }
 }
