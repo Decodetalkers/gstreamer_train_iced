@@ -46,7 +46,7 @@ impl From<FrameData> for image::Handle {
 #[derive(Debug)]
 pub struct GstreamerIced {
     frame: Arc<Mutex<Option<FrameData>>>, //pipeline: gst::Pipeline,
-    bus: Arc<AsyncMutex<gst::Bus>>,
+    bus: gst::Bus,
     source: gst::Bin,
     play_status: PlayStatus,
     rv: Arc<AsyncMutex<mpsc::Receiver<GStreamerMessage>>>,
@@ -247,9 +247,7 @@ impl GstreamerIced {
                     let buffer = sample.buffer().ok_or(gst::FlowError::Error)?;
                     let map = buffer.map_readable().map_err(|_| gst::FlowError::Error)?;
 
-                    let pad = sink.static_pad("sink").ok_or(gst::FlowError::Error)?;
-
-                    let caps = pad.caps().ok_or(gst::FlowError::Error)?;
+                    let caps = sample.caps().ok_or(gst::FlowError::Error)?;
                     let s = caps.structure(0).ok_or(gst::FlowError::Error)?;
                     let width = s.get::<i32>("width").map_err(|_| gst::FlowError::Error)?;
                     let height = s.get::<i32>("height").map_err(|_| gst::FlowError::Error)?;
@@ -273,7 +271,7 @@ impl GstreamerIced {
 
         Ok(Self {
             frame,
-            bus: Arc::new(AsyncMutex::new(source.bus().unwrap())),
+            bus: source.bus().unwrap(),
             source: source.into(),
             play_status: PlayStatus::Playing,
             rv: Arc::new(AsyncMutex::new(rv)),
@@ -315,9 +313,7 @@ impl GstreamerIced {
                     let buffer = sample.buffer().ok_or(gst::FlowError::Error)?;
                     let map = buffer.map_readable().map_err(|_| gst::FlowError::Error)?;
 
-                    let pad = sink.static_pad("sink").ok_or(gst::FlowError::Error)?;
-
-                    let caps = pad.caps().ok_or(gst::FlowError::Error)?;
+                    let caps = sample.caps().ok_or(gst::FlowError::Error)?;
                     let s = caps.structure(0).ok_or(gst::FlowError::Error)?;
                     let width = s.get::<i32>("width").map_err(|_| gst::FlowError::Error)?;
                     let height = s.get::<i32>("height").map_err(|_| gst::FlowError::Error)?;
@@ -351,7 +347,7 @@ impl GstreamerIced {
 
         Ok(Self {
             frame,
-            bus: Arc::new(AsyncMutex::new(source.bus().unwrap())),
+            bus: source.bus().unwrap(),
             source,
             play_status: PlayStatus::Stop,
             rv: Arc::new(AsyncMutex::new(rv)),
@@ -389,7 +385,6 @@ impl GstreamerIced {
                     std::any::TypeId::of::<BusWatcher>(),
                     100,
                     |mut output| async move {
-                        let bus = bus.lock().await;
                         let mut thebus = bus.stream();
                         loop {
                             if let Some(view) = thebus.next().await {
