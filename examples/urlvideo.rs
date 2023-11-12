@@ -28,7 +28,7 @@ fn main() -> iced::Result {
 
 #[derive(Debug)]
 struct GstreamerIcedProgram {
-    frame: GstreamerIced,
+    frame: GstreamerIcedBase,
 }
 #[derive(Debug, Clone, Copy)]
 enum GStreamerIcedMessage {

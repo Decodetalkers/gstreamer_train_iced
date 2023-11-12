@@ -43,8 +43,12 @@ impl From<FrameData> for image::Handle {
     }
 }
 
+pub type GstreamerIcedBase = GstreamerIced<0>;
+
+pub type GstreamerIcedPipewire = GstreamerIced<1>;
+
 #[derive(Debug)]
-pub struct GstreamerIced {
+pub struct GstreamerIced<const X: usize> {
     frame: Arc<Mutex<Option<FrameData>>>, //pipeline: gst::Pipeline,
     bus: gst::Bus,
     source: gst::Bin,
@@ -120,7 +124,7 @@ pub enum GStreamerMessage {
     BusGoToEnd,
 }
 
-impl Drop for GstreamerIced {
+impl<const X: usize> Drop for GstreamerIced<X> {
     fn drop(&mut self) {
         self.source
             .set_state(gst::State::Null)
@@ -128,90 +132,7 @@ impl Drop for GstreamerIced {
     }
 }
 
-impl GstreamerIced {
-    /// get the volume of the video
-    pub fn volume(&self) -> f64 {
-        self.volume
-    }
-
-    /// only can be set when source is video
-    pub fn set_volume(&mut self, volume: f64) {
-        if self.is_pipewire {
-            return;
-        }
-        self.source.set_property("volume", volume);
-    }
-
-    /// get the duration, if is live or pipewire, it is 0
-    pub fn duration(&self) -> std::time::Duration {
-        self.duration
-    }
-
-    /// where the video is now
-    pub fn position(&self) -> std::time::Duration {
-        self.position
-    }
-
-    /// turn duration to seconds
-    pub fn duration_seconds(&self) -> f64 {
-        self.duration.as_secs_f64()
-    }
-
-    /// turn position to seconds
-    pub fn position_seconds(&self) -> f64 {
-        self.position.as_secs_f64()
-    }
-
-    /// turn duration to nanos
-    pub fn duration_nanos(&self) -> f64 {
-        self.duration.as_secs_f64()
-    }
-
-    /// turn position to nanos
-    pub fn position_nanos(&self) -> u128 {
-        self.position.as_nanos()
-    }
-
-    pub fn seek<T>(&mut self, position: T) -> Result<(), Error>
-    where
-        T: Into<Position>,
-    {
-        if self.is_pipewire {
-            return Ok(());
-        }
-        let pos: Position = position.into();
-        let positon: GenericFormattedValue = pos.into();
-        self.source.seek_simple(gst::SeekFlags::FLUSH, positon)?;
-
-        if let PlayStatus::End = self.play_status {
-            self.play_status = PlayStatus::Playing;
-        }
-
-        Ok(())
-    }
-
-    /// return an [image::Handle], you can use it to make image
-    pub fn frame_handle(&self) -> Option<image::Handle> {
-        self.frame
-            .lock()
-            .map(|frame| frame.clone().map(|f| f.into()))
-            .unwrap_or(None)
-    }
-
-    /// return [FrameData], you can directly access the data
-    pub fn frame_data(&self) -> Option<FrameData> {
-        self.frame.lock().map(|frame| frame.clone()).unwrap_or(None)
-    }
-
-    /// what the playing status is
-    pub fn play_status(&self) -> &PlayStatus {
-        &self.play_status
-    }
-
-    fn is_playing(&self) -> bool {
-        matches!(self.play_status, PlayStatus::Playing)
-    }
-
+impl GstreamerIcedPipewire {
     /// Accept a pipewire stream, it accept a pipewire path, you may can get it from ashpd, it is
     /// called node.
     pub fn new_pipewire(path: u32) -> Result<Self, Error> {
@@ -281,6 +202,23 @@ impl GstreamerIced {
             volume: 0_f64,
             is_pipewire: true,
         })
+    }
+}
+
+impl GstreamerIcedBase {
+    pub fn seek<T>(&mut self, position: T) -> Result<(), Error>
+    where
+        T: Into<Position>,
+    {
+        let pos: Position = position.into();
+        let positon: GenericFormattedValue = pos.into();
+        self.source.seek_simple(gst::SeekFlags::FLUSH, positon)?;
+
+        if let PlayStatus::End = self.play_status {
+            self.play_status = PlayStatus::Playing;
+        }
+
+        Ok(())
     }
 
     /// accept url like from local or from http
@@ -357,6 +295,73 @@ impl GstreamerIced {
             volume: 0_f64,
             is_pipewire: false,
         })
+    }
+}
+
+impl<const X: usize> GstreamerIced<X> {
+    /// get the volume of the video
+    pub fn volume(&self) -> f64 {
+        self.volume
+    }
+
+    /// only can be set when source is video
+    pub fn set_volume(&mut self, volume: f64) {
+        if self.is_pipewire {
+            return;
+        }
+        self.source.set_property("volume", volume);
+    }
+
+    /// get the duration, if is live or pipewire, it is 0
+    pub fn duration(&self) -> std::time::Duration {
+        self.duration
+    }
+
+    /// where the video is now
+    pub fn position(&self) -> std::time::Duration {
+        self.position
+    }
+
+    /// turn duration to seconds
+    pub fn duration_seconds(&self) -> f64 {
+        self.duration.as_secs_f64()
+    }
+
+    /// turn position to seconds
+    pub fn position_seconds(&self) -> f64 {
+        self.position.as_secs_f64()
+    }
+
+    /// turn duration to nanos
+    pub fn duration_nanos(&self) -> f64 {
+        self.duration.as_secs_f64()
+    }
+
+    /// turn position to nanos
+    pub fn position_nanos(&self) -> u128 {
+        self.position.as_nanos()
+    }
+
+    /// return an [image::Handle], you can use it to make image
+    pub fn frame_handle(&self) -> Option<image::Handle> {
+        self.frame
+            .lock()
+            .map(|frame| frame.clone().map(|f| f.into()))
+            .unwrap_or(None)
+    }
+
+    /// return [FrameData], you can directly access the data
+    pub fn frame_data(&self) -> Option<FrameData> {
+        self.frame.lock().map(|frame| frame.clone()).unwrap_or(None)
+    }
+
+    /// what the playing status is
+    pub fn play_status(&self) -> &PlayStatus {
+        &self.play_status
+    }
+
+    fn is_playing(&self) -> bool {
+        matches!(self.play_status, PlayStatus::Playing)
     }
 
     /// get the subscription, you can use in iced::subscription

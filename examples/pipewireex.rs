@@ -52,7 +52,7 @@ struct InitFlage {
 }
 
 struct GstreamerIcedProgram {
-    frame: GstreamerIced,
+    frame: GstreamerIcedPipewire,
 }
 #[derive(Debug, Clone, Copy)]
 enum GStreamerIcedMessage {
@@ -122,15 +122,7 @@ impl Application for GstreamerIcedProgram {
             GStreamerIcedMessage::Gst(message) => {
                 self.frame.update(message).map(GStreamerIcedMessage::Gst)
             }
-            GStreamerIcedMessage::Jump(step) => {
-                self.frame
-                    .seek(std::time::Duration::from_secs(step as u64 * 8))
-                    .unwrap();
-                Command::perform(
-                    async { GStreamerMessage::Update },
-                    GStreamerIcedMessage::Gst,
-                )
-            }
+            GStreamerIcedMessage::Jump(_) => Command::none(),
             GStreamerIcedMessage::VolChange(vol) => {
                 let currentvol = self.frame.volume();
                 let newvol = currentvol + vol;
