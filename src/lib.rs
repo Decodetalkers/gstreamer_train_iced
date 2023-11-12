@@ -203,6 +203,29 @@ impl GstreamerIcedPipewire {
             is_pipewire: true,
         })
     }
+
+    /// update for pipewire
+    pub fn update(&mut self, message: GStreamerMessage) -> iced::Command<GStreamerMessage> {
+        match message {
+            GStreamerMessage::PlayStatusChanged(status) => {
+                match status {
+                    PlayStatus::Playing => {
+                        self.source.set_state(gst::State::Playing).unwrap();
+                    }
+                    PlayStatus::Stop => {
+                        self.source.set_state(gst::State::Paused).unwrap();
+                    }
+                    _ => {}
+                }
+                self.play_status = status;
+            }
+            GStreamerMessage::BusGoToEnd => {
+                self.play_status = PlayStatus::End;
+            }
+            _ => {}
+        }
+        Command::none()
+    }
 }
 
 impl GstreamerIcedBase {
@@ -295,6 +318,61 @@ impl GstreamerIcedBase {
             volume: 0_f64,
             is_pipewire: false,
         })
+    }
+
+    // update for gstreamer base
+    pub fn update(&mut self, message: GStreamerMessage) -> iced::Command<GStreamerMessage> {
+        match message {
+            GStreamerMessage::Update => {
+                // get the info in the first time of dispatch
+                if self.info_get_started {
+                    loop {
+                        // FIXME: move it to stream listener
+                        self.source
+                            .state(gst::ClockTime::from_seconds(5))
+                            .0
+                            .unwrap();
+
+                        if let Some(time) = self.source.query_duration::<gst::ClockTime>() {
+                            self.duration = std::time::Duration::from_nanos(time.nseconds());
+                            break;
+                        }
+                    }
+                    self.info_get_started = false;
+                }
+                if self.duration.as_nanos() != 0 {
+                    loop {
+                        if let Some(time) = self.source.query_position::<gst::ClockTime>() {
+                            self.position = std::time::Duration::from_nanos(time.nseconds());
+                            break;
+                        }
+                        self.source
+                            .state(gst::ClockTime::from_seconds(5))
+                            .0
+                            .unwrap();
+                    }
+                }
+                self.volume = self.source.property("volume");
+            }
+
+            GStreamerMessage::PlayStatusChanged(status) => {
+                match status {
+                    PlayStatus::Playing => {
+                        self.source.set_state(gst::State::Playing).unwrap();
+                    }
+                    PlayStatus::Stop => {
+                        self.source.set_state(gst::State::Paused).unwrap();
+                    }
+                    _ => {}
+                }
+                self.play_status = status;
+            }
+            GStreamerMessage::BusGoToEnd => {
+                self.play_status = PlayStatus::End;
+            }
+            _ => {}
+        }
+        Command::none()
     }
 }
 
@@ -408,61 +486,6 @@ impl<const X: usize> GstreamerIced<X> {
         } else {
             iced::Subscription::none()
         }
-    }
-
-    pub fn update(&mut self, message: GStreamerMessage) -> iced::Command<GStreamerMessage> {
-        match message {
-            GStreamerMessage::Update => {
-                // get the info in the first time of dispatch
-                if !self.is_pipewire {
-                    if self.info_get_started {
-                        loop {
-                            // FIXME: move it to stream listener
-                            self.source
-                                .state(gst::ClockTime::from_seconds(5))
-                                .0
-                                .unwrap();
-
-                            if let Some(time) = self.source.query_duration::<gst::ClockTime>() {
-                                self.duration = std::time::Duration::from_nanos(time.nseconds());
-                                break;
-                            }
-                        }
-                        self.info_get_started = false;
-                    }
-                    if self.duration.as_nanos() != 0 {
-                        loop {
-                            if let Some(time) = self.source.query_position::<gst::ClockTime>() {
-                                self.position = std::time::Duration::from_nanos(time.nseconds());
-                                break;
-                            }
-                            self.source
-                                .state(gst::ClockTime::from_seconds(5))
-                                .0
-                                .unwrap();
-                        }
-                    }
-                    self.volume = self.source.property("volume");
-                }
-            }
-            GStreamerMessage::PlayStatusChanged(status) => {
-                match status {
-                    PlayStatus::Playing => {
-                        self.source.set_state(gst::State::Playing).unwrap();
-                    }
-                    PlayStatus::Stop => {
-                        self.source.set_state(gst::State::Paused).unwrap();
-                    }
-                    _ => {}
-                }
-                self.play_status = status;
-            }
-            GStreamerMessage::BusGoToEnd => {
-                self.play_status = PlayStatus::End;
-            }
-            _ => {}
-        }
-        Command::none()
     }
 
     /// get the type name
