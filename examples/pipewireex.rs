@@ -4,7 +4,7 @@ use ashpd::{
     WindowIdentifier,
 };
 
-use iced::widget::{button, column, image, row, slider, text, Image};
+use iced::widget::{button, column, image, text, Image};
 use iced::{executor, widget::container, Application, Theme};
 use iced::{Command, Element, Length, Settings};
 
@@ -57,8 +57,6 @@ struct GstreamerIcedProgram {
 #[derive(Debug, Clone, Copy)]
 enum GStreamerIcedMessage {
     Gst(GStreamerMessage),
-    Jump(u8),
-    VolChange(f64),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -75,10 +73,6 @@ impl Application for GstreamerIcedProgram {
             .frame
             .frame_handle()
             .unwrap_or(image::Handle::from_memory(MEDIA_PLAYER));
-        let fullduration = self.frame.duration_seconds();
-        let current_pos = self.frame.position_seconds();
-        let duration = (fullduration / 8.0) as u8;
-        let pos = (current_pos / 8.0) as u8;
 
         let btn: Element<Self::Message> = match self.frame.play_status() {
             PlayStatus::Stop | PlayStatus::End => button(text("|>")).on_press(
@@ -91,23 +85,8 @@ impl Application for GstreamerIcedProgram {
         .into();
         let video = Image::new(frame).width(Length::Fill);
 
-        let pos_status = text(format!("{:.1} s/{:.1} s", current_pos, fullduration));
-        let du_silder = slider(0..=duration, pos, GStreamerIcedMessage::Jump);
-
-        let add_vol = button(text("+")).on_press(GStreamerIcedMessage::VolChange(0.1));
-        let min_vol = button(text("-")).on_press(GStreamerIcedMessage::VolChange(-0.1));
-        let volcurrent = self.frame.volume() * 100.0;
-
-        let voicetext = text(format!("{:.0} %", volcurrent));
-
-        let duration_component = row![pos_status, du_silder, voicetext, add_vol, min_vol]
-            .spacing(2)
-            .padding(2)
-            .width(Length::Fill);
-
         container(column![
             video,
-            duration_component,
             container(btn).width(Length::Fill).center_x()
         ])
         .width(Length::Fill)
@@ -118,23 +97,8 @@ impl Application for GstreamerIcedProgram {
     }
 
     fn update(&mut self, message: Self::Message) -> iced::Command<Self::Message> {
-        match message {
-            GStreamerIcedMessage::Gst(message) => {
-                self.frame.update(message).map(GStreamerIcedMessage::Gst)
-            }
-            GStreamerIcedMessage::Jump(_) => Command::none(),
-            GStreamerIcedMessage::VolChange(vol) => {
-                let currentvol = self.frame.volume();
-                let newvol = currentvol + vol;
-                if newvol >= 0.0 {
-                    self.frame.set_volume(newvol);
-                }
-                Command::perform(
-                    async { GStreamerMessage::Update },
-                    GStreamerIcedMessage::Gst,
-                )
-            }
-        }
+        let GStreamerIcedMessage::Gst(message) = message;
+        self.frame.update(message).map(GStreamerIcedMessage::Gst)
     }
 
     fn title(&self) -> String {
