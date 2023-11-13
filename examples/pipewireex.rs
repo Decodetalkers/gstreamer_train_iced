@@ -110,7 +110,7 @@ impl Application for GstreamerIcedProgram {
     }
 
     fn new(flags: Self::Flags) -> (Self, Command<Self::Message>) {
-        let frame = GstreamerIced::new_pipewire(flags.path).unwrap();
+        let frame = GstreamerIced::new_pipewire_to_file(flags.path).unwrap();
 
         (Self { frame }, Command::none())
     }
