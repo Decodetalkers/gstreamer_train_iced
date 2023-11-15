@@ -1,6 +1,7 @@
 mod gstreamerbase;
 mod gstreamerpipewire;
 
+use futures::channel::mpsc;
 use gst::glib;
 use gst::prelude::*;
 use gst::GenericFormattedValue;
@@ -11,8 +12,6 @@ use iced::widget::image;
 use smol::lock::Mutex as AsyncMutex;
 use std::sync::{Arc, Mutex};
 use thiserror::Error;
-
-use std::sync::mpsc;
 
 pub mod reexport {
     pub use url;
@@ -168,9 +167,9 @@ impl<const X: usize> GstreamerIced<X> {
                     std::any::TypeId::of::<()>(),
                     100,
                     |mut output| async move {
-                        let rv = rv.lock().await;
+                        let mut rv = rv.lock().await;
                         loop {
-                            let Ok(message) = rv.recv() else {
+                            let Some(message) = rv.next().await else {
                                 continue;
                             };
                             let _ = output.send(message).await;

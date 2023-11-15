@@ -1529,6 +1529,7 @@ version = "0.1.6"
 dependencies = [
  "anyhow",
  "ashpd",
+ "futures",
  "gstreamer",
  "gstreamer-app",
  "iced",

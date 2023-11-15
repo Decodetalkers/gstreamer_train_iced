@@ -4,8 +4,8 @@ use gstreamer as gst;
 use gstreamer_app as gst_app;
 use iced::Command;
 use smol::lock::Mutex as AsyncMutex;
-use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
+use futures::channel::mpsc;
 
 use super::{FrameData, GStreamerMessage, GstreamerIced, IcedGStreamerError, PlayStatus, Position};
 
@@ -48,7 +48,7 @@ impl GstreamerIcedBase {
         let frame: Arc<Mutex<Option<FrameData>>> = Arc::new(Mutex::new(None));
         let frame_ref = Arc::clone(&frame);
 
-        let (sd, rv) = mpsc::channel::<GStreamerMessage>();
+        let (mut sd, rv) = mpsc::channel::<GStreamerMessage>(100);
 
         app_sink.set_callbacks(
             gst_app::AppSinkCallbacks::builder()
@@ -66,7 +66,7 @@ impl GstreamerIcedBase {
                         height: height as _,
                         pixels: map.as_slice().to_owned(),
                     });
-                    sd.send(GStreamerMessage::FrameUpdate).ok();
+                    sd.try_send(GStreamerMessage::FrameUpdate).ok();
                     Ok(gst::FlowSuccess::Ok)
                 })
                 .build(),

@@ -27,6 +27,7 @@ gstreamer-app = "0.21.1"
 url = "2.4.1"
 smol = "1.3.0"
 thiserror = "1.0.50"
+futures = "0.3.29"
 
 [dev-dependencies]
 tokio = { version = "1.34", features = ["full"] }
