@@ -192,8 +192,10 @@ impl<const X: usize> GstreamerIced<X> {
                         }
                         loop {
                             // DO NOTHING here
-                            futures_time::task::sleep(futures_time::time::Duration::from_secs(1))
-                                .await;
+                            futures_time::task::sleep(futures_time::time::Duration::from_millis(
+                                10,
+                            ))
+                            .await;
                         }
                     },
                 ),
