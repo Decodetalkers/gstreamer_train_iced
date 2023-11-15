@@ -181,16 +181,19 @@ impl<const X: usize> GstreamerIced<X> {
                     100,
                     |mut output| async move {
                         let mut thebus = bus.stream();
-                        loop {
-                            if let Some(view) = thebus.next().await {
-                                match view.view() {
-                                    gst::MessageView::Error(err) => panic!("{:#?}", err),
-                                    gst::MessageView::Eos(_eos) => {
-                                        let _ = output.send(GStreamerMessage::BusGoToEnd).await;
-                                    }
-                                    _ => {}
+                        while let Some(view) = thebus.next().await {
+                            match view.view() {
+                                gst::MessageView::Error(err) => panic!("{:#?}", err),
+                                gst::MessageView::Eos(_eos) => {
+                                    let _ = output.send(GStreamerMessage::BusGoToEnd).await;
                                 }
+                                _ => {}
                             }
+                        }
+                        loop {
+                            // DO NOTHING here
+                            futures_time::task::sleep(futures_time::time::Duration::from_secs(1))
+                                .await;
                         }
                     },
                 ),
