@@ -1,3 +1,4 @@
+use futures::channel::mpsc;
 use gst::prelude::*;
 use gst::GenericFormattedValue;
 use gstreamer as gst;
@@ -5,7 +6,6 @@ use gstreamer_app as gst_app;
 use iced::Command;
 use smol::lock::Mutex as AsyncMutex;
 use std::sync::{Arc, Mutex};
-use futures::channel::mpsc;
 
 use super::{FrameData, GStreamerMessage, GstreamerIced, IcedGStreamerError, PlayStatus, Position};
 
