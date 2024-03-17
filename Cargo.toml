@@ -39,7 +39,7 @@ iced = { version = "0.12", features = [
 	"advanced",
 	"svg",
 ] }
-ashpd = { version = "0.7.0", default-features = false, features = [
+ashpd = { version = "0.8.1", default-features = false, features = [
 	"tokio",
 	"pipewire",
 	"wayland",
