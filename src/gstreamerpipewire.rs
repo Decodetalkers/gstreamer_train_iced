@@ -26,8 +26,6 @@ impl GstreamerIcedPipewire {
 
         let pipewiresrc = gst::ElementFactory::make("pipewiresrc")
             .property("path", path.to_string())
-            .property("do-timestamp", true)
-            .property("resend-last", true)
             .build()?;
 
         let tee = gst::ElementFactory::make("tee").name("iced_tee").build()?;
@@ -40,17 +38,12 @@ impl GstreamerIcedPipewire {
             .name("file_queue")
             .build()?;
 
-        //let visual = gst::ElementFactory::make("wavescope")
-        //    .name("visual")
-        //    .property_from_str("shader", "none")
-        //    .property_from_str("style", "lines")
-        //    .build()
-        //    .unwrap();
-
-        let encoder = gst::ElementFactory::make("wavescope").build().unwrap();
-        let muxer = gst::ElementFactory::make("videoconvert")
-            .name("mp4mux")
+        let videoconvert_file = gst::ElementFactory::make("videoconvert")
+            .name("fileconvertor")
             .build()?;
+
+        let encoder = gst::ElementFactory::make("x264enc").build().unwrap();
+        let muxer = gst::ElementFactory::make("mp4mux").name("mp4mux").build()?;
 
         let file_sink = gst::ElementFactory::make("filesink")
             .property(
@@ -62,7 +55,10 @@ impl GstreamerIcedPipewire {
             )
             .build()?;
 
-        let videoconvert = gst::ElementFactory::make("videoconvert").build()?;
+        let videoconvert = gst::ElementFactory::make("videoconvert")
+            .name("videoconvert")
+            .build()?;
+
         let videoscale = gst::ElementFactory::make("videoscale").build()?;
 
         let app_sink_caps = gst::Caps::builder("video/x-raw")
@@ -111,6 +107,7 @@ impl GstreamerIcedPipewire {
             &videoscale,
             &app_sink,
             &file_queue,
+            &videoconvert_file,
             &encoder,
             &muxer,
             &file_sink,
@@ -118,7 +115,13 @@ impl GstreamerIcedPipewire {
 
         gst::Element::link_many([&pipewiresrc, &tee])?;
         gst::Element::link_many([&video_queue, &videoconvert, &videoscale, &app_sink])?;
-        gst::Element::link_many([&file_queue, &encoder, &muxer, &file_sink])?;
+        gst::Element::link_many([
+            &file_queue,
+            &videoconvert_file,
+            &encoder,
+            &muxer,
+            &file_sink,
+        ])?;
 
         let tee_audio_pad = tee.request_pad_simple("src_%u").unwrap();
         let queue_audio_pad = video_queue.static_pad("sink").unwrap();
@@ -128,10 +131,7 @@ impl GstreamerIcedPipewire {
         let file_pad = file_queue.static_pad("sink").unwrap();
         tee_video_pad.link(&file_pad).unwrap();
 
-        println!("fff");
         source.set_state(gst::State::Playing)?;
-
-        println!("eeee");
 
         Ok(Self {
             frame,
@@ -227,6 +227,9 @@ impl GstreamerIcedPipewire {
                     }
                     PlayStatus::Stop => {
                         self.source.set_state(gst::State::Paused).unwrap();
+                    }
+                    PlayStatus::Exit => {
+                        self.source.set_state(gst::State::Null).unwrap();
                     }
                     _ => {}
                 }

@@ -57,7 +57,7 @@ impl Application for GstreamerIcedProgram {
         let pos = (current_pos / 8.0) as u8;
 
         let btn: Element<Self::Message> = match self.frame.play_status() {
-            PlayStatus::Stop | PlayStatus::End => button(text("|>")).on_press(
+            PlayStatus::Stop | PlayStatus::End | PlayStatus::Exit => button(text("|>")).on_press(
                 GStreamerIcedMessage::Gst(GStreamerMessage::PlayStatusChanged(PlayStatus::Playing)),
             ),
             PlayStatus::Playing => button(text("[]")).on_press(GStreamerIcedMessage::Gst(
