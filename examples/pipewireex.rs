@@ -37,6 +37,7 @@ async fn get_path() -> anyhow::Result<u32> {
     }
     Err(anyhow!("Not get"))
 }
+
 #[tokio::main]
 async fn main() -> iced::Result {
     let path = get_path().await.unwrap();
@@ -110,7 +111,8 @@ impl Application for GstreamerIcedProgram {
     }
 
     fn new(flags: Self::Flags) -> (Self, Command<Self::Message>) {
-        let frame = GstreamerIced::new_pipewire(flags.path).unwrap();
+        let frame =
+            GstreamerIced::new_pipewire_with_record(flags.path, "/tmp/aa.mp4").unwrap();
 
         (Self { frame }, Command::none())
     }
