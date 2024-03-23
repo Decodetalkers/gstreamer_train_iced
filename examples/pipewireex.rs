@@ -37,6 +37,7 @@ async fn get_path() -> anyhow::Result<u32> {
     }
     Err(anyhow!("Not get"))
 }
+
 #[tokio::main]
 async fn main() -> iced::Result {
     let path = get_path().await.unwrap();
@@ -75,7 +76,7 @@ impl Application for GstreamerIcedProgram {
             .unwrap_or(image::Handle::from_memory(MEDIA_PLAYER));
 
         let btn: Element<Self::Message> = match self.frame.play_status() {
-            PlayStatus::Stop | PlayStatus::End => button(text("|>")).on_press(
+            PlayStatus::Stop | PlayStatus::End | PlayStatus::Exit => button(text("|>")).on_press(
                 GStreamerIcedMessage::Gst(GStreamerMessage::PlayStatusChanged(PlayStatus::Playing)),
             ),
             PlayStatus::Playing => button(text("[]")).on_press(GStreamerIcedMessage::Gst(
@@ -83,11 +84,16 @@ impl Application for GstreamerIcedProgram {
             )),
         }
         .into();
+
+        let btn2 = button(text("quit")).on_press(GStreamerIcedMessage::Gst(
+            GStreamerMessage::PlayStatusChanged(PlayStatus::Exit),
+        ));
         let video = Image::new(frame).width(Length::Fill);
 
         container(column![
             video,
-            container(btn).width(Length::Fill).center_x()
+            container(btn).width(Length::Fill).center_x(),
+            container(btn2).width(Length::Fill).center_x()
         ])
         .width(Length::Fill)
         .height(Length::Fill)
@@ -110,7 +116,9 @@ impl Application for GstreamerIcedProgram {
     }
 
     fn new(flags: Self::Flags) -> (Self, Command<Self::Message>) {
-        let frame = GstreamerIced::new_pipewire(flags.path).unwrap();
+        let home = std::env::var("HOME").unwrap();
+        let file = format!("{home}/aa.mp4");
+        let frame = GstreamerIced::new_pipewire_with_record(flags.path, file).unwrap();
 
         (Self { frame }, Command::none())
     }

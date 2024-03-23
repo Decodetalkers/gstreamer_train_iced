@@ -21,6 +21,7 @@ pub mod reexport {
 pub enum PlayStatus {
     Stop,
     Playing,
+    Exit,
     End,
 }
 
